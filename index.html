@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Iron.Log</title>
+<meta name="theme-color" content="#0B0F18">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Iron.Log">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0F18;
+    --surface:#131A28;
+    --surface-2:#1B2436;
+    --hair:rgba(150,180,220,.10);
+    --hair-strong:rgba(150,180,220,.20);
+    --chalk:#EDF2FA;
+    --muted:#94A3BC;
+    --muted-dim:#5C6B85;
+    --amber:#27E1C1;
+    --amber-soft:rgba(39,225,193,.13);
+    --amber-line:rgba(39,225,193,.45);
+    --steel:#6F8BD6;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--chalk);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    line-height:1.4;
+    padding-bottom:96px;
+    overscroll-behavior-y:contain;
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:0 16px}
+
+  /* Header */
+  header{
+    padding:26px 0 14px;
+    border-bottom:1px solid var(--hair);
+    margin-bottom:18px;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand h1{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    font-size:30px;line-height:.9;margin:0;
+  }
+  .brand h1 .x{color:var(--amber)}
+  .brand .tag{
+    font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--muted-dim);font-weight:600;
+  }
+  .sub{margin-top:8px;font-size:13px;color:var(--muted)}
+
+  /* Day toggle */
+  .daypick{display:flex;gap:8px;margin:18px 0 6px}
+  .daypick button{
+    flex:1;background:var(--surface);color:var(--muted);
+    border:1px solid var(--hair);border-radius:12px;
+    padding:12px 10px;cursor:pointer;text-align:left;
+    transition:border-color .15s,background .15s,color .15s;
+  }
+  .daypick button .lab{
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;
+    text-transform:uppercase;letter-spacing:.05em;font-size:18px;line-height:1;
+  }
+  .daypick button .desc{display:block;font-size:11px;margin-top:3px;color:var(--muted-dim)}
+  .daypick button.on{
+    background:var(--amber-soft);border-color:var(--amber-line);color:var(--chalk);
+  }
+  .daypick button.on .desc{color:var(--muted)}
+
+  .typepick{display:none;gap:7px;overflow-x:auto;padding:10px 0 2px;-webkit-overflow-scrolling:touch}
+  .typepick.show{display:flex}
+  .typechip{
+    flex:0 0 auto;background:var(--surface);border:1px solid var(--hair);color:var(--muted);
+    border-radius:999px;padding:8px 14px;font-family:'Inter';font-size:12.5px;font-weight:600;cursor:pointer;
+    white-space:nowrap;
+  }
+  .typechip.on{background:var(--amber);color:#04231e;border-color:var(--amber)}
+
+  .planbanner{
+    background:var(--amber-soft);border:1px solid var(--amber-line);
+    border-radius:13px;padding:13px 15px;margin:4px 0 2px;
+  }
+
+  .resttimer{
+    position:fixed;left:16px;bottom:96px;z-index:35;
+    background:var(--surface-2);border:1px solid var(--amber-line);color:var(--amber);
+    border-radius:11px;padding:10px 16px;cursor:pointer;
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.04em;
+    font-size:16px;font-variant-numeric:tabular-nums;display:none;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  .resttimer.show{display:block}
+  .resttimer.done{color:#04231e;background:var(--amber)}
+  .planbanner.hidden{display:none}
+  .pb-title{
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;text-transform:uppercase;
+    letter-spacing:.05em;font-size:17px;color:var(--amber);line-height:1;
+  }
+  .pb-why{font-size:12.5px;color:var(--chalk);margin-top:7px;line-height:1.45;opacity:.92}
+  .pb-why b{color:var(--amber);font-weight:600}
+
+  .meta-row{display:flex;align-items:center;justify-content:space-between;margin:14px 0 4px}
+  .meta-row .week{font-size:13px;color:var(--muted)}
+  .datefield{
+    background:var(--surface);border:1px solid var(--hair);color:var(--chalk);
+    border-radius:9px;padding:7px 10px;font-family:'Inter';font-size:13px;
+  }
+
+  /* Exercise card */
+  .ex{
+    background:var(--surface);border:1px solid var(--hair);
+    border-radius:14px;padding:14px 14px 6px;margin-bottom:12px;
+  }
+  .ex-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+  .ex-name{
+    font-family:'Barlow Condensed',sans-serif;font-weight:600;
+    font-size:21px;letter-spacing:.01em;line-height:1;margin:0;cursor:pointer;
+  }
+  .info-i{font-size:13px;color:var(--muted-dim);vertical-align:middle}
+  .info-cue{background:var(--surface-2);border:1px solid var(--hair);border-radius:11px;padding:12px 13px;margin-top:14px;font-size:13.5px;line-height:1.5;color:var(--chalk)}
+  .info-cue-l{display:block;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-dim);font-weight:700;margin-bottom:5px}
+  .ex-target{
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted-dim);font-weight:600;margin-top:5px;
+  }
+  .last{
+    text-align:right;flex-shrink:0;min-width:74px;
+  }
+  .last .k{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-dim);font-weight:600}
+  .last .v{
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;
+    line-height:1;color:var(--muted);font-variant-numeric:tabular-nums;
+  }
+  .last .v.none{color:var(--muted-dim);font-size:15px}
+
+  .sug{
+    display:inline-block;margin-top:9px;border:1px solid var(--hair-strong);
+    background:var(--surface-2);color:var(--muted);border-radius:999px;
+    padding:6px 12px;font-family:'Inter';font-size:12px;font-weight:600;
+    cursor:pointer;letter-spacing:.01em;transition:border-color .15s,color .15s,background .15s;
+  }
+  .sug:active{transform:scale(.97)}
+  .sug.up{color:var(--amber);border-color:var(--amber-line);background:var(--amber-soft)}
+  .sug.hold{color:var(--steel);border-color:rgba(111,139,214,.4)}
+  .sug.repeat{color:var(--muted)}
+  .sug.base{cursor:default;color:var(--muted-dim)}
+
+  .ex-right{display:flex;align-items:flex-start;gap:8px}
+  .ex-btns{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+  .swapbtn{
+    background:none;border:1px solid var(--hair);color:var(--muted-dim);
+    width:30px;height:30px;border-radius:8px;font-size:15px;line-height:1;cursor:pointer;
+  }
+  .swapbtn:active{color:var(--amber);border-color:var(--amber-line)}
+  .infobtn{
+    background:var(--amber-soft);border:1px solid var(--amber-line);color:var(--amber);
+    width:30px;height:30px;border-radius:8px;font-size:15px;line-height:1;cursor:pointer;
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;font-style:italic;
+  }
+  .infobtn:active{background:var(--amber);color:#04231e}
+  .swaptray{
+    display:flex;flex-wrap:wrap;gap:7px;align-items:center;
+    background:var(--surface-2);border:1px solid var(--hair);border-radius:11px;
+    padding:10px 11px;margin:0 0 12px;
+  }
+  .swaptray-l{font-size:11px;color:var(--muted);font-weight:600;width:100%;margin-bottom:2px}
+  .swapchip{
+    background:var(--surface);border:1px solid var(--hair-strong);color:var(--chalk);
+    border-radius:999px;padding:7px 12px;font-family:'Inter';font-size:12px;font-weight:600;cursor:pointer;
+  }
+  .swapchip:active{background:var(--amber-soft);border-color:var(--amber-line);color:var(--amber)}
+  .swapchip.cancel{color:var(--muted-dim);border-style:dashed}
+  .rm{
+    background:none;border:1px solid var(--hair);color:var(--muted-dim);
+    width:30px;height:30px;border-radius:8px;font-size:18px;line-height:1;cursor:pointer;
+    flex:0 0 auto;
+  }
+  .rm:active{color:var(--amber);border-color:var(--amber-line)}
+  .addset{
+    background:none;border:none;color:var(--muted-dim);cursor:pointer;
+    font-family:'Inter';font-size:12px;font-weight:600;letter-spacing:.04em;
+    padding:8px 2px 4px;
+  }
+  .addset:active{color:var(--amber)}
+  .ex-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .restbtn{
+    background:none;border:1px solid var(--hair);color:var(--muted);cursor:pointer;
+    font-family:'Inter';font-size:12px;font-weight:600;letter-spacing:.02em;
+    padding:7px 12px;border-radius:9px;margin:4px 0;
+  }
+  .restbtn:active{color:var(--amber);border-color:var(--amber-line)}
+  .savelift{
+    background:var(--surface-2);border:1px solid var(--hair-strong);color:var(--chalk);cursor:pointer;
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    font-size:14px;padding:8px 16px;border-radius:9px;margin:4px 0;
+  }
+  .savelift:active{transform:scale(.97)}
+  .savelift.done{background:var(--amber-soft);border-color:var(--amber-line);color:var(--amber)}
+  .ex.saved{border-color:var(--amber-line)}
+
+  /* recap modal */
+  .modal{
+    position:fixed;inset:0;z-index:60;display:none;
+    background:rgba(8,6,4,.72);backdrop-filter:blur(3px);
+    align-items:flex-end;justify-content:center;padding:0;
+  }
+  .modal.show{display:flex}
+  .modal-card{
+    width:100%;max-width:560px;background:var(--surface);
+    border:1px solid var(--hair-strong);border-bottom:none;
+    border-radius:20px 20px 0 0;padding:22px 18px calc(18px + env(safe-area-inset-bottom));
+    max-height:88vh;overflow-y:auto;animation:rcup .28s ease;
+  }
+  @keyframes rcup{from{transform:translateY(40px);opacity:.4}to{transform:translateY(0);opacity:1}}
+  .rc-h{font-family:'Barlow Condensed',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:24px;line-height:1}
+  .rc-h .x{color:var(--amber)}
+  .rc-sub{font-size:13px;color:var(--muted);margin-top:4px}
+  .rc-stats{display:flex;gap:10px;margin:16px 0 6px}
+  .rc-stats > div{flex:1;background:var(--surface-2);border:1px solid var(--hair);border-radius:12px;padding:12px 10px;text-align:center}
+  .rc-n{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;line-height:1;font-variant-numeric:tabular-nums}
+  .rc-k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-dim);font-weight:600;margin-top:5px}
+  .rc-lifts{margin-top:12px}
+  .rc-lift{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--hair);font-size:13px}
+  .rc-lift:first-child{border-top:none}
+  .rc-lift > span:first-child{color:var(--chalk)}
+  .rc-lift > span:last-child{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;text-align:right;white-space:nowrap}
+  .rc-up{color:var(--amber)} .rc-down{color:var(--muted)} .rc-same{color:var(--muted)} .rc-new{color:var(--steel)}
+  .rc-notes{margin:14px 0 4px;display:flex;flex-direction:column;gap:8px}
+  .rc-note{background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:11px;padding:11px 13px;font-size:13px;line-height:1.45;color:var(--chalk)}
+  .modal-card .btn-primary{width:100%;margin-top:18px}
+  .addlift{
+    border:1px dashed var(--hair-strong);border-radius:14px;padding:14px;margin-top:4px;
+  }
+  .addlift-row{display:flex;gap:8px}
+  .addlift select{
+    flex:1;background:var(--surface-2);color:var(--chalk);border:1px solid var(--hair);
+    border-radius:10px;padding:12px 10px;font-family:'Inter';font-size:14px;outline:none;
+  }
+  .addlift .addbtn{
+    background:var(--surface-2);color:var(--chalk);border:1px solid var(--hair-strong);
+    border-radius:10px;padding:0 18px;cursor:pointer;
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;text-transform:uppercase;
+    letter-spacing:.05em;font-size:15px;
+  }
+  .addlift .addbtn:active{transform:scale(.97)}
+  .addlift #customname{
+    width:100%;margin-top:8px;background:var(--surface-2);color:var(--chalk);
+    border:1px solid var(--hair);border-radius:10px;padding:12px 11px;
+    font-family:'Inter';font-size:14px;outline:none;
+  }
+  .addlift #customname:focus{border-color:var(--amber-line)}
+
+  .reset{
+    display:block;width:100%;margin-top:16px;background:none;
+    border:1px solid var(--hair);color:var(--muted-dim);border-radius:11px;
+    padding:13px;cursor:pointer;font-family:'Inter';font-size:13px;font-weight:600;
+    letter-spacing:.04em;
+  }
+  .reset:active{color:#ff5a5a;border-color:rgba(255,90,90,.4)}
+  .imphint{display:none;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:11px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--chalk);line-height:1.45}
+  .imphint.show{display:block}
+  .databtns{display:flex;gap:8px;margin-top:14px}
+  .databtn{
+    flex:1;background:var(--surface);border:1px solid var(--hair);color:var(--muted);
+    border-radius:11px;padding:13px;cursor:pointer;font-family:'Inter';font-size:13px;font-weight:600;
+    letter-spacing:.02em;
+  }
+  .databtn:active{color:var(--amber);border-color:var(--amber-line)}
+  .dm-h{font-family:'Barlow Condensed',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:20px}
+  .dm-sub{font-size:13px;color:var(--muted);margin:6px 0 12px;line-height:1.45}
+  .dm-ta{
+    width:100%;min-height:120px;background:var(--bg);border:1px solid var(--hair);color:var(--chalk);
+    border-radius:10px;padding:11px;font-family:ui-monospace,Menlo,monospace;font-size:11px;
+    outline:none;resize:vertical;
+  }
+  .dm-ta:focus{border-color:var(--amber-line)}
+  .dm-row{display:flex;gap:8px;margin-top:12px}
+  .dm-row .btn{flex:1;margin-top:0}
+  .dm-file{display:block;margin-top:10px;font-size:12px;color:var(--muted)}
+
+  /* activity form */
+  .actform{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:14px}
+  .fld{display:block;margin-bottom:12px}
+  .fld:last-child{margin-bottom:0}
+  .fld-l{display:block;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-dim);font-weight:700;margin-bottom:6px}
+  .fld-l em{font-style:normal;color:var(--muted-dim);opacity:.7;letter-spacing:.04em}
+  .fld select,.fld input,.actcustom{
+    width:100%;background:var(--surface-2);border:1px solid var(--hair);color:var(--chalk);
+    border-radius:10px;padding:12px 11px;font-family:'Inter';font-size:15px;outline:none;
+  }
+  .fld input{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px}
+  .fld select:focus,.fld input:focus,.actcustom:focus{border-color:var(--amber-line)}
+  .actcustom{margin:-4px 0 12px}
+  .fld-row{display:flex;gap:10px}
+  .fld-row .fld{flex:1}
+  .hrow.act b{color:var(--amber)}
+
+  /* set rows */
+  .set{
+    display:grid;grid-template-columns:30px 1fr 1fr;gap:8px;align-items:center;
+    padding:6px 0;border-top:1px solid var(--hair);
+  }
+  .set:first-of-type{border-top:none}
+  .set .sn{
+    font-family:'Barlow Condensed',sans-serif;font-weight:600;color:var(--muted-dim);
+    font-size:15px;text-align:center;
+  }
+  .inp{position:relative}
+  .inp input{
+    width:100%;background:var(--surface-2);border:1px solid var(--hair);
+    color:var(--chalk);border-radius:10px;padding:11px 30px 11px 11px;
+    font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px;
+    font-variant-numeric:tabular-nums;outline:none;transition:border-color .15s;
+  }
+  .inp input:focus{border-color:var(--amber-line)}
+  .inp .unit{
+    position:absolute;right:10px;top:50%;transform:translateY(-50%);
+    font-size:11px;color:var(--muted-dim);font-weight:600;pointer-events:none;
+    letter-spacing:.04em;
+  }
+  .colhdr{
+    display:grid;grid-template-columns:30px 1fr 1fr;gap:8px;
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted-dim);font-weight:600;padding:0 0 4px;
+  }
+  .colhdr span:nth-child(1){text-align:center}
+  .colhdr span{padding-left:2px}
+
+  /* save bar */
+  .savebar{
+    position:fixed;bottom:0;left:0;right:0;
+    background:linear-gradient(to top,var(--bg) 62%,transparent);
+    padding:14px 16px 18px;z-index:20;
+  }
+  .savebar .inner{max-width:560px;margin:0 auto;display:flex;gap:10px}
+  .btn{
+    border:none;border-radius:13px;padding:15px;cursor:pointer;
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;
+    text-transform:uppercase;letter-spacing:.06em;font-size:17px;
+    transition:transform .08s,filter .15s;
+  }
+  .btn:active{transform:scale(.98)}
+  .btn-primary{flex:1;background:var(--amber);color:#04231e}
+  .btn-primary:hover{filter:brightness(1.06)}
+  .btn-ghost{
+    background:var(--surface);color:var(--muted);border:1px solid var(--hair);
+    flex:0 0 auto;padding-left:20px;padding-right:20px;
+  }
+
+  /* tabs */
+  .tabs{display:flex;gap:24px;border-bottom:1px solid var(--hair);margin-bottom:18px}
+  .tabs button{
+    background:none;border:none;color:var(--muted-dim);cursor:pointer;
+    font-family:'Barlow Condensed',sans-serif;font-weight:600;text-transform:uppercase;
+    letter-spacing:.08em;font-size:16px;padding:0 0 12px;position:relative;
+  }
+  .tabs button.on{color:var(--chalk)}
+  .tabs button.on::after{
+    content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--amber);
+  }
+
+  /* progress */
+  .pex{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:14px;margin-bottom:12px}
+  .pex-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:10px}
+  .pex-name{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:20px;margin:0}
+  .pstats{display:flex;gap:18px}
+  .stat .k{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-dim);font-weight:600}
+  .stat .v{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;line-height:1.05;font-variant-numeric:tabular-nums}
+  .stat .v small{font-size:12px;color:var(--muted);font-weight:600}
+  .spark{width:100%;height:54px;display:block;margin-top:4px}
+  .delta{font-size:12px;font-weight:600;font-family:'Inter'}
+  .up{color:var(--amber)}
+  .flat{color:var(--muted)}
+  .empty{color:var(--muted-dim);font-size:13px;padding:8px 0}
+
+  .hist h3{font-family:'Barlow Condensed',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:15px;color:var(--muted);margin:24px 0 10px}
+  .hitem{margin-bottom:8px}
+  .hrow{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--hair);border-radius:11px 11px 0 0;padding:11px 13px;border-bottom:none}
+  .hrow .hd{font-size:13px}
+  .hrow .hd b{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:.03em}
+  .hrow .hd .dt{color:var(--muted);font-size:12px;margin-top:2px}
+  .del{background:none;border:1px solid var(--hair);color:var(--muted-dim);border-radius:8px;padding:6px 10px;font-size:11px;cursor:pointer;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+  .del:active{color:var(--amber)}
+  .hdetail{display:none;background:var(--surface);border:1px solid var(--hair);border-top:none;border-radius:0 0 11px 11px;padding:2px 13px 8px}
+  .hdetail.open{display:block}
+  .hx{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--hair)}
+  .hx:first-child{border-top:none}
+  .hx-n{font-size:13px;color:var(--chalk)}
+  .hx-s{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;color:var(--amber);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  .hrecap{margin-top:8px;padding-top:8px;border-top:1px solid var(--hair);font-size:12px;color:var(--muted)}
+  .hrecap b{color:var(--amber)}
+  .hrecap-note{margin-top:6px;font-size:12px;color:var(--muted);line-height:1.4}
+
+  /* toast */
+  .toast{
+    position:fixed;left:50%;bottom:92px;
+    transform:translateX(-50%) translateY(14px);
+    background:var(--amber);color:#04231e;padding:12px 22px;border-radius:12px;
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.05em;
+    text-transform:uppercase;font-size:15px;opacity:0;pointer-events:none;
+    transition:opacity .25s,transform .25s;z-index:40;box-shadow:0 8px 30px rgba(0,0,0,.4);
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .hidden{display:none}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Iron<span class="x">.</span>Log</h1>
+      <span class="tag">Full-body · Weekends</span>
+    </div>
+    <div class="sub">Beat last week's top set. Add 2.5 kg or a rep when it moves clean.</div>
+  </header>
+
+  <div class="tabs">
+    <button id="tab-train" class="on" onclick="switchTab('train')">Train</button>
+    <button id="tab-prog" onclick="switchTab('prog')">Progress</button>
+  </div>
+
+  <!-- TRAIN -->
+  <section id="view-train">
+    <div class="daypick">
+      <button id="day-N" class="on" onclick="setDay('N')">
+        <span class="lab">Next</span>
+        <span class="desc">Auto plan</span>
+      </button>
+      <button id="day-C" onclick="setDay('C')">
+        <span class="lab">Custom</span>
+        <span class="desc">Build your own</span>
+      </button>
+      <button id="day-X" onclick="setDay('X')">
+        <span class="lab">Activity</span>
+        <span class="desc">Run, sport…</span>
+      </button>
+    </div>
+
+    <div class="planbanner" id="planbanner"></div>
+    <div class="typepick" id="typepick"></div>
+
+    <div class="meta-row">
+      <span class="week" id="weeklabel">Session date</span>
+      <input type="date" id="sessdate" class="datefield" onchange="onDateChange()">
+    </div>
+
+    <div id="exlist"></div>
+  </section>
+
+  <!-- PROGRESS -->
+  <section id="view-prog" class="hidden">
+    <div id="proglist"></div>
+    <div class="hist">
+      <h3>Logged sessions</h3>
+      <div id="histlist"></div>
+      <div class="imphint" id="imphint"></div>
+      <div class="databtns">
+        <button class="databtn" onclick="openExport()">⤓ Export backup</button>
+        <button class="databtn" onclick="openImport()">⤒ Import backup</button>
+      </div>
+      <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="datamodal" onclick="if(event.target===this)closeData()">
+  <div class="modal-card" id="datamodal-card"></div>
+</div>
+<div class="modal" id="infomodal" onclick="if(event.target===this)closeInfo()">
+  <div class="modal-card" id="infomodal-card"></div>
+</div>
+
+<div class="savebar" id="savebar">
+  <div class="inner">
+    <button class="btn btn-ghost" onclick="clearInputs()">Clear</button>
+    <button class="btn btn-primary" onclick="saveSession()">Log session</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">Logged</div>
+<div class="resttimer" id="resttimer" onclick="stopRest()"></div>
+<div class="modal" id="recap" onclick="if(event.target===this)closeRecap()">
+  <div class="modal-card" id="recap-card"></div>
+</div>
+
+<script>
+// When running outside Claude (e.g. installed on your phone), there is no
+// window.storage — fall back to the browser's localStorage so your log persists
+// across launches and across app updates. Inside Claude, the native store is used.
+if(!window.storage){
+  window.storage = {
+    get:    async (k)   => { try{ const v = localStorage.getItem(k); return v==null ? null : {value:v}; }catch(e){ return null; } },
+    set:    async (k,v) => { try{ localStorage.setItem(k, v); }catch(e){} return {value:v}; },
+    delete: async (k)   => { try{ localStorage.removeItem(k); }catch(e){} return {deleted:true}; },
+  };
+}
+// ── Full gym exercise library ──────────────────────────────────────────────
+// cat: knee|hinge|calf|hpush|vpush|hpull|vpull|biceps|triceps|core
+// role: compound|accessory|iso   ·   bw: bodyweight (weight field = added kg)
+// IDs for the original nine lifts are kept stable so existing logs still track.
+const LIBRARY = [
+  // Legs — quad / knee
+  {id:'squat',     name:'Back squat',          cat:'knee',  role:'compound', lo:5, hi:8,  inc:5},
+  {id:'fsquat',    name:'Front squat',         cat:'knee',  role:'compound', lo:5, hi:8,  inc:5},
+  {id:'legpress',  name:'Leg press',           cat:'knee',  role:'compound', lo:8, hi:12, inc:5},
+  {id:'hacksquat', name:'Hack squat',          cat:'knee',  role:'compound', lo:8, hi:10, inc:5},
+  {id:'gobsquat',  name:'Goblet squat',        cat:'knee',  role:'accessory',lo:8, hi:12, inc:2.5},
+  {id:'bsplit',    name:'Bulgarian split squat',cat:'knee', role:'accessory',lo:8, hi:12, inc:2.5},
+  {id:'lunge',     name:'Walking lunge',       cat:'knee',  role:'accessory',lo:8, hi:12, inc:2.5},
+  {id:'legext',    name:'Leg extension',       cat:'knee',  role:'iso',      lo:10,hi:15, inc:2.5},
+  // Legs — hamstring / glute / hinge
+  {id:'dead',      name:'Deadlift',            cat:'hinge', role:'compound', lo:4, hi:6,  inc:5},
+  {id:'trapdl',    name:'Trap-bar deadlift',   cat:'hinge', role:'compound', lo:5, hi:8,  inc:5},
+  {id:'rdl',       name:'Romanian deadlift',   cat:'hinge', role:'compound', lo:8, hi:10, inc:5},
+  {id:'hipthrust', name:'Hip thrust',          cat:'hinge', role:'compound', lo:8, hi:12, inc:5},
+  {id:'goodmorn',  name:'Good morning',        cat:'hinge', role:'accessory',lo:8, hi:12, inc:5},
+  {id:'legcurl',   name:'Lying leg curl',      cat:'hinge', role:'iso',      lo:10,hi:15, inc:2.5},
+  {id:'backext',   name:'Back extension',      cat:'hinge', role:'iso',      lo:10,hi:15, inc:2.5},
+  // Calves
+  {id:'stcalf',    name:'Standing calf raise', cat:'calf',  role:'iso',      lo:10,hi:15, inc:2.5},
+  {id:'secalf',    name:'Seated calf raise',   cat:'calf',  role:'iso',      lo:12,hi:15, inc:2.5},
+  // Chest / horizontal push
+  {id:'bench',     name:'Bench press',         cat:'hpush', role:'compound', lo:6, hi:8,  inc:2.5},
+  {id:'binc',      name:'Incline bench press', cat:'hpush', role:'compound', lo:6, hi:10, inc:2.5},
+  {id:'dbbench',   name:'DB bench press',      cat:'hpush', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'dbincl',    name:'Incline DB press',    cat:'hpush', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'machpress', name:'Machine chest press', cat:'hpush', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'dips',      name:'Dips',                cat:'hpush', role:'compound', lo:6, hi:12, inc:2.5, bw:true},
+  {id:'pecfly',    name:'Pec deck / cable fly',cat:'hpush', role:'iso',      lo:10,hi:15, inc:2.5},
+  // Shoulders / vertical push
+  {id:'ohp',       name:'Overhead press',      cat:'vpush', role:'compound', lo:6, hi:10, inc:2.5},
+  {id:'dbohp',     name:'DB shoulder press',   cat:'vpush', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'arnold',    name:'Arnold press',        cat:'vpush', role:'accessory',lo:8, hi:12, inc:2.5},
+  {id:'latraise',  name:'Lateral raise',       cat:'vpush', role:'iso',      lo:12,hi:15, inc:2.5},
+  {id:'rearfly',   name:'Rear delt fly',       cat:'vpush', role:'iso',      lo:12,hi:15, inc:2.5},
+  // Back / horizontal pull
+  {id:'row',       name:'Bent-over row',       cat:'hpull', role:'compound', lo:8, hi:10, inc:2.5},
+  {id:'dbrow',     name:'DB row',              cat:'hpull', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'cablerow',  name:'Seated cable row',    cat:'hpull', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'csrow',     name:'Chest-supported row', cat:'hpull', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'tbar',      name:'T-bar row',           cat:'hpull', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'facepull',  name:'Face pull',           cat:'hpull', role:'iso',      lo:12,hi:20, inc:2.5},
+  // Lats / vertical pull
+  {id:'pull',      name:'Lat pulldown',        cat:'vpull', role:'compound', lo:8, hi:10, inc:2.5},
+  {id:'pullup',    name:'Pull-up',             cat:'vpull', role:'compound', lo:5, hi:10, inc:2.5, bw:true},
+  {id:'chinup',    name:'Chin-up',             cat:'vpull', role:'compound', lo:5, hi:10, inc:2.5, bw:true},
+  {id:'strarm',    name:'Straight-arm pulldown',cat:'vpull',role:'iso',      lo:10,hi:15, inc:2.5},
+  // Biceps
+  {id:'curl',      name:'EZ-bar curl',         cat:'biceps',role:'iso',      lo:8, hi:12, inc:2.5},
+  {id:'bbcurl',    name:'Barbell curl',        cat:'biceps',role:'iso',      lo:8, hi:12, inc:2.5},
+  {id:'dbcurl',    name:'Dumbbell curl',       cat:'biceps',role:'iso',      lo:8, hi:12, inc:2.5},
+  {id:'hammer',    name:'Hammer curl',         cat:'biceps',role:'iso',      lo:8, hi:12, inc:2.5},
+  {id:'preacher',  name:'Preacher curl',       cat:'biceps',role:'iso',      lo:8, hi:12, inc:2.5},
+  {id:'cablecurl', name:'Cable curl',          cat:'biceps',role:'iso',      lo:10,hi:15, inc:2.5},
+  // Triceps
+  {id:'pushdown',  name:'Tricep pushdown',     cat:'triceps',role:'iso',     lo:10,hi:15, inc:2.5},
+  {id:'ohext',     name:'Overhead extension',  cat:'triceps',role:'iso',     lo:10,hi:15, inc:2.5},
+  {id:'skull',     name:'Skullcrusher',        cat:'triceps',role:'iso',     lo:8, hi:12, inc:2.5},
+  {id:'cgbench',   name:'Close-grip bench',    cat:'triceps',role:'compound',lo:6, hi:10, inc:2.5},
+  // Core
+  {id:'cablecrn',  name:'Cable crunch',        cat:'core',  role:'iso',      lo:10,hi:15, inc:2.5},
+  {id:'hangleg',   name:'Hanging leg raise',   cat:'core',  role:'iso',      lo:8, hi:15, inc:2.5, bw:true},
+  {id:'abwheel',   name:'Ab wheel',            cat:'core',  role:'iso',      lo:8, hi:15, inc:2.5, bw:true},
+];
+
+// keyed lookup + derived display reps; EXDEF kept as the name used elsewhere
+const EXDEF = {};
+LIBRARY.forEach(e=>{
+  e.sets = e.sets || 3;
+  e.reps = `${e.sets} × ${e.lo}${e.hi!==e.lo?'–'+e.hi:''}`;
+  EXDEF[e.id] = e;
+});
+const NAMES = {}; LIBRARY.forEach(e=> NAMES[e.id]=e.name);
+const PATTERN = {}; LIBRARY.forEach(e=> PATTERN[e.id]=e.cat);
+
+// candidate ids per category, ordered compound → accessory → iso
+const ROLE_RANK = {compound:0, accessory:1, iso:2};
+const CAND = {};
+LIBRARY.forEach(e=>{ (CAND[e.cat]=CAND[e.cat]||[]).push(e.id); });
+Object.values(CAND).forEach(arr=> arr.sort((a,b)=> ROLE_RANK[EXDEF[a].role]-ROLE_RANK[EXDEF[b].role]));
+
+const CAT_ORDER = ['knee','hinge','calf','hpush','vpush','hpull','vpull','biceps','triceps','core'];
+const CAT_LABEL = {knee:'Legs · quads',hinge:'Legs · hamstrings & glutes',calf:'Calves',hpush:'Chest',vpush:'Shoulders',hpull:'Back · rows',vpull:'Back · pulldowns/pull-ups',biceps:'Biceps',triceps:'Triceps',core:'Core'};
+
+// high-fatigue axial lifts to avoid on back-to-back days
+const HIGH_FATIGUE = new Set(['deadlift','dead','trapdl','squat','fsquat','goodmorn']);
+
+// muscle map per movement category → highlighted regions + plain-language label
+const MUSC = {
+  knee:   {regions:['quads','glutes'],                 label:'Quads, with glutes'},
+  hinge:  {regions:['hams','glutes','lowerback'],       label:'Hamstrings, glutes & lower back'},
+  calf:   {regions:['calves'],                          label:'Calves'},
+  hpush:  {regions:['chest','delts','triceps'],          label:'Chest, front delts & triceps'},
+  vpush:  {regions:['delts','reardelts','triceps'],      label:'Shoulders & triceps'},
+  hpull:  {regions:['lats','traps','reardelts','biceps'],label:'Upper back, lats & biceps'},
+  vpull:  {regions:['lats','biceps'],                    label:'Lats & biceps'},
+  biceps: {regions:['biceps','forearms'],                label:'Biceps & forearms'},
+  triceps:{regions:['triceps'],                          label:'Triceps'},
+  core:   {regions:['abs'],                              label:'Core / abs'},
+};
+// one concise form cue per exercise
+const CUES = {
+  squat:'Brace, sit between the hips, knees tracking over toes, drive up through mid-foot.',
+  fsquat:'Bar on front delts, elbows high, stay tall, sit straight down.',
+  legpress:'Feet shoulder-width, lower to ~90°, don\u2019t let the lower back round off the pad.',
+  hacksquat:'Shoulders under the pads, controlled descent, drive through the heels.',
+  gobsquat:'Hold the bell at your chest, elbows inside the knees at the bottom.',
+  bsplit:'Rear foot elevated, drop straight down, weight through the front heel.',
+  lunge:'Long stride, drop the back knee, push back up through the front foot.',
+  legext:'Control the lowering, squeeze the quads hard at the top, no swinging.',
+  dead:'Bar over mid-foot, flat back, push the floor away, lock hips and knees together.',
+  trapdl:'Stand inside the bar, neutral spine, drive up tall.',
+  rdl:'Soft knees, push the hips back, bar close, feel the hamstring stretch, don\u2019t round.',
+  hipthrust:'Shoulders on the bench, chin tucked, drive the hips up, squeeze glutes at the top.',
+  goodmorn:'Light load, hinge with a flat back, feel the hamstrings, return tall.',
+  legcurl:'Curl the heels toward the glutes, control the negative, hips stay down.',
+  backext:'Hinge at the hips with a flat back, squeeze the glutes at the top.',
+  stcalf:'Full stretch at the bottom, rise high onto the toes, pause at the top.',
+  secalf:'Knees bent, deep stretch, controlled drive through the big toe.',
+  bench:'Shoulder blades pinched, slight arch, bar to mid-chest, drive to lockout.',
+  binc:'30\u201345° bench, bar to the upper chest, elbows about 45°.',
+  dbbench:'Dumbbells stacked over the shoulders, lower to chest level, press together.',
+  dbincl:'Incline set, lower under control, press up and slightly in.',
+  machpress:'Handles at mid-chest, press without flaring the elbows, control the return.',
+  dips:'Lean slightly forward for chest, lower to ~90°, press to lockout.',
+  pecfly:'Fix a slight elbow bend, hug the weight in, squeeze the chest.',
+  ohp:'Brace hard, press from the collarbone to overhead, head through at the top.',
+  dbohp:'Dumbbells at shoulder height, press overhead, don\u2019t arch the back.',
+  arnold:'Start palms-in, rotate to palms-forward as you press overhead.',
+  latraise:'Slight forward lean, lead with the elbows to shoulder height, no swing.',
+  rearfly:'Hinge over, raise out wide, squeeze the rear delts, thumbs slightly down.',
+  row:'Hinge to ~45°, pull the bar to the lower ribs, drive the elbows back, flat back.',
+  dbrow:'One knee on the bench, pull the dumbbell to the hip, squeeze the lat.',
+  cablerow:'Tall chest, pull to the belly, shoulder blades back, don\u2019t heave.',
+  csrow:'Chest on the pad, row the handles back, squeeze the upper back.',
+  tbar:'Hinged over, pull to the chest, drive the elbows back.',
+  facepull:'Pull the rope to the forehead, elbows high, rotate the hands back.',
+  pull:'Lean back slightly, pull the bar to the upper chest, drive elbows down.',
+  pullup:'Dead hang, pull the chest to the bar, control the descent.',
+  chinup:'Palms toward you, pull up, big bicep and lat squeeze.',
+  strarm:'Arms fairly straight, push the bar down to the thighs, feel the lats.',
+  curl:'Elbows pinned, curl up, squeeze, lower slowly \u2014 no swinging.',
+  bbcurl:'Elbows fixed at the sides, curl the bar up, control it down.',
+  dbcurl:'Curl with a slight turn-out of the wrist, squeeze, no momentum.',
+  hammer:'Neutral grip, curl up \u2014 hits the brachialis and forearm.',
+  preacher:'Arms on the pad, full stretch at the bottom, controlled curl.',
+  cablecurl:'Constant cable tension, elbows still, squeeze at the top.',
+  pushdown:'Elbows pinned to the sides, extend fully, control back up.',
+  ohext:'Elbows by the ears, extend overhead, keep them from flaring.',
+  skull:'Lower the bar toward the forehead \u2014 only the forearms move.',
+  cgbench:'Hands shoulder-width, elbows tucked, press \u2014 triceps focus.',
+  cablecrn:'Kneel, crunch the ribs toward the pelvis, round the spine, don\u2019t pull with the arms.',
+  hangleg:'Hang, raise the legs or knees, control the descent, no swinging.',
+  abwheel:'Brace hard, roll out only as far as you can keep a flat back.',
+};
+
+// ── Seed: the workout logged on 13 Jun (inserted once on first load) ─────────
+const SEED = { id:1718239813000, date:'2026-06-13', day:'Upper body', entries:{
+  bench:[{w:20,r:20},{w:60,r:8},{w:60,r:8},{w:60,r:6}],
+  dbrow:[{w:25,r:10},{w:30,r:10},{w:30,r:10}],
+  pull:[{w:43,r:10},{w:63,r:10},{w:59,r:10}],
+  pushdown:[{w:18,r:10},{w:18,r:10},{w:18,r:10}],
+  ohp:[{w:35,r:10}],
+  curl:[{w:20,r:10},{w:20,r:10}]
+}};
+const SEED2 = { id:1718239900000, date:'2026-06-14', day:'Full body · hinge lead', entries:{
+  rdl:[{w:40,r:10},{w:40,r:10},{w:40,r:12}],
+  dbohp:[{w:35,r:12},{w:40,r:5},{w:35,r:6}],
+  lunge:[{w:40,r:14},{w:32,r:14},{w:40,r:14}],
+  cablerow:[{w:45,r:10},{w:52,r:15},{w:52,r:10}],
+  dips:[{w:0,r:8},{w:0,r:7}],
+  facepull:[{w:23,r:12},{w:27,r:9}],
+  bbcurl:[{w:30,r:7},{w:20,r:12}],
+  cgbench:[{w:20,r:10},{w:30,r:10},{w:40,r:10}]
+}};
+const SEEDS = [SEED, SEED2];
+
+// activity (non-lifting) options
+const ACTIVITIES = ['Run','Walk','Cycle','Swim','Squash','Tennis','Football','Rowing','Hike','Climbing','Yoga / mobility','Other'];
+
+// ── Single balanced full-body scheme (sets / reps / rest by role) ───────────
+const SCHEME = {
+  compound:{sets:3, lo:6,  hi:10, rest:120},
+  accessory:{sets:3, lo:10, hi:12, rest:90},
+  iso:{sets:3, lo:12, hi:15, rest:75},
+};
+function roleOf(ex){ return (ex && ex.role) || 'accessory'; }
+function gcfg(ex){ return SCHEME[roleOf(ex)] || SCHEME.accessory; }
+function effSets(ex){ return gcfg(ex).sets; }
+function effLo(ex){ return gcfg(ex).lo; }
+function effHi(ex){ return gcfg(ex).hi; }
+function effInc(ex){ return ex.inc || 2.5; }
+function fmtRest(s){ return s>=60 ? (s%60===0 ? (s/60)+' min' : Math.floor(s/60)+':'+String(s%60).padStart(2,'0')) : s+' sec'; }
+function repsLabel(ex){ const c=gcfg(ex); return `${c.sets} × ${c.lo}${c.hi!==c.lo?'–'+c.hi:''} · rest ${fmtRest(c.rest)}`; }
+
+let NAMES_REG = {};                 // custom lift id -> display name
+function getName(id){ return NAMES[id] || NAMES_REG[id] || id; }
+
+let currentDay = 'N';               // 'N' = auto next session, 'C' = custom, 'X' = activity
+let workList = [];                  // lifts for the current session, in order
+let currentPlanTitle = '';          // label for an auto-generated session
+let currentPlanType = 'auto';       // session emphasis for the Next plan
+let activeDraft = null;             // in-progress session saved lift-by-lift
+let sessions = [];
+
+const KEY  = 'ironlog-sessions-v1';
+const NKEY = 'ironlog-names-v1';
+
+async function loadSessions(){
+  try{
+    const r = await window.storage.get(KEY);
+    sessions = r && r.value ? JSON.parse(r.value) : [];
+  }catch(e){ sessions = []; }
+  try{
+    const n = await window.storage.get(NKEY);
+    NAMES_REG = n && n.value ? JSON.parse(n.value) : {};
+  }catch(e){ NAMES_REG = {}; }
+}
+async function persist(){
+  try{
+    await window.storage.set(KEY, JSON.stringify(sessions));
+    await window.storage.set(NKEY, JSON.stringify(NAMES_REG));
+  }catch(e){ toast('Save failed — try again'); }
+}
+
+// most recent prior session containing this exercise → its heaviest set
+function lastTopSet(exId, beforeDate){
+  const prior = sessions
+    .filter(s => s.entries && s.entries[exId] && s.entries[exId].length)
+    .filter(s => !beforeDate || s.date < beforeDate)
+    .sort((a,b)=> b.date.localeCompare(a.date));
+  if(!prior.length) return null;
+  const sets = prior[0].entries[exId];
+  return sets.reduce((m,s)=> s.w > m.w ? s : m, sets[0]);
+}
+
+// last full set list for an exercise (most recent session)
+function lastSets(exId){
+  const prior = sessions
+    .filter(s => s.entries && s.entries[exId] && s.entries[exId].length)
+    .sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id);
+  return prior.length ? prior[0].entries[exId] : null;
+}
+
+// chronological top sets for an exercise across recent sessions
+function recentTops(exId, bw, k){
+  const ss = sessions
+    .filter(s => s.entries && s.entries[exId] && s.entries[exId].length)
+    .sort((a,b)=> a.date.localeCompare(b.date) || a.id-b.id)
+    .slice(-(k||5))
+    .map(s=> topOf(s.entries[exId], bw));
+  return ss;
+}
+function epley(w, r){ return w * (1 + Math.min(r,15)/30); }   // estimated 1-rep max
+
+// learned recommendation: projects a target from your recent trend, not just last time
+function suggestNext(ex){
+  const sets = lastSets(ex.id);
+  if(!sets) return null;
+  const lo = effLo(ex), hi = effHi(ex), inc = effInc(ex);
+  const round = w => Math.round(w/inc)*inc;
+
+  if(ex.bw){                                    // bodyweight: progress reps, then added load
+    const tops = recentTops(ex.id, true);
+    const maxR = Math.max(...sets.map(s=>s.r));
+    const addLoad = Math.max(...sets.map(s=>s.w));
+    const climbing = tops.length>=2 && tops[tops.length-1].r > tops[0].r;
+    if(maxR >= hi) return {bw:true, dir:'up', tag: addLoad>0 ? `add load past +${fmt(addLoad)} kg` : `add load — past ${hi} reps`};
+    return {bw:true, dir:'hold', tag: climbing ? `trending up — beat ${maxR} reps` : `beat ${maxR} reps`};
+  }
+
+  const topW = Math.max(...sets.map(s=>s.w));
+  const repsAtTop = Math.min(...sets.filter(s=>s.w===topW).map(s=>s.r));
+  const fixed = lo===hi, cleared = repsAtTop>=hi, inRange = repsAtTop>=lo;
+
+  // trend projection via estimated 1RM over recent sessions
+  const tops = recentTops(ex.id, false);
+  const e = tops.map(t=> epley(t.w, t.r));
+  if(e.length >= 2){
+    const n=e.length; let sx=0,sy=0,sxx=0,sxy=0;
+    for(let i=0;i<n;i++){ sx+=i; sy+=e[i]; sxx+=i*i; sxy+=i*e[i]; }
+    const slope = (n*sxx - sx*sx) ? (n*sxy - sx*sy)/(n*sxx - sx*sx) : 0;
+    const projE = e[n-1] + Math.max(0, slope);                 // only project upward
+    const midReps = Math.round((lo+hi)/2);
+    let projW = round(projE / (1 + midReps/30));
+    projW = Math.max(topW, Math.min(projW, topW + 2*inc));     // clamp to a sane step
+    const rising = n>=3 && tops[n-1].w>=tops[n-2].w && tops[n-2].w>=tops[n-3].w;
+    if(!inRange) return {weight: topW, dir:'repeat', tag:`build to ${lo}–${hi} at ${fmt(topW)} kg`};
+    if(projW > topW) return {weight: projW, dir:'up', tag: rising ? 'on a roll — projected target' : 'projected from your trend'};
+    if(cleared) return {weight: topW+inc, dir:'up', tag:`cleared ${hi}${fixed?'':'+'} — step up`};
+    return {weight: topW, dir:'hold', tag: fixed ? `lock in ${hi} reps` : `chase ${hi} reps`};
+  }
+
+  // single data point — simple rule
+  if(cleared) return {weight: topW + inc, dir:'up', tag:`cleared ${hi}${fixed?'':'+'} reps`};
+  if(inRange) return {weight: topW, dir:'hold', tag: fixed ? `lock in ${hi} reps` : `chase ${hi} reps`};
+  return {weight: topW, dir:'repeat', tag:`build to ${lo}–${hi}`};
+}
+
+function fillWeight(exId, w){
+  document.querySelectorAll(`#exlist input[data-ex="${exId}"][data-f="w"]`).forEach(i=> i.value = w);
+}
+
+function setRowHTML(exId, i, phW, val){
+  const wv = val && val.w!=null ? ` value="${val.w}"` : '';
+  const rv = val && val.r!=null ? ` value="${val.r}"` : '';
+  return `<div class="set" data-ex="${exId}">
+    <div class="sn">${i+1}</div>
+    <div class="inp"><input inputmode="decimal" data-ex="${exId}" data-f="w" placeholder="${phW}"${wv}><span class="unit">kg</span></div>
+    <div class="inp"><input inputmode="numeric" data-ex="${exId}" data-f="r" placeholder=""${rv}></div>
+  </div>`;
+}
+
+function renderTrain(){
+  const list = document.getElementById('exlist');
+  list.innerHTML = '';
+  if(currentDay==='X'){ list.innerHTML = activityFormHTML(); onActType(); return; }
+  const exs = workList;
+
+  exs.forEach(ex=>{
+    const last = lastTopSet(ex.id);
+    const sug = suggestNext(ex);
+    let phW = '';
+    if(sug && !sug.bw) phW = fmt(sug.weight);
+    else if(last && !(ex.bw && last.w===0)) phW = fmt(last.w);
+    const saved = activeDraft && activeDraft.entries[ex.id] && activeDraft.entries[ex.id].length ? activeDraft.entries[ex.id] : null;
+    const card = document.createElement('div');
+    card.className = 'ex' + (saved ? ' saved' : '');
+    card.setAttribute('data-card', ex.id);
+    let rows = '';
+    const nSets = Math.max(effSets(ex), saved ? saved.length : 0);
+    for(let i=0;i<nSets;i++) rows += setRowHTML(ex.id, i, phW, saved ? saved[i] : null);
+
+    const arrow = sug ? (sug.dir==='up'?'↑':sug.dir==='hold'?'→':'↺') : '';
+    let pill;
+    if(sug && sug.bw){
+      pill = `<div class="sug ${sug.dir}">${arrow} ${sug.tag}</div>`;
+    } else if(sug){
+      pill = `<button class="sug ${sug.dir}" onclick="fillWeight('${ex.id}',${sug.weight})">${arrow} ${fmt(sug.weight)} kg · ${sug.tag}</button>`;
+    } else if(last){
+      pill = (ex.bw && last.w===0)
+        ? `<div class="sug repeat">↺ last ${last.r} reps — beat it</div>`
+        : `<button class="sug repeat" onclick="fillWeight('${ex.id}',${last.w})">↺ ${fmt(last.w)} kg last — beat it</button>`;
+    } else {
+      pill = `<div class="sug base">${ex.bw?'Bodyweight — log reps (add kg if loaded)':'New lift — set your baseline'}</div>`;
+    }
+    const lastVal = last ? `${(ex.bw && last.w===0)?'BW':fmt(last.w)}<small style="font-size:12px;color:var(--muted-dim)">×${last.r}</small>` : '';
+    const restSec = gcfg(ex).rest;
+
+    card.innerHTML = `
+      <div class="ex-head">
+        <div>
+          <h2 class="ex-name" onclick="openInfo('${ex.id}')">${ex.name} <span class="info-i">ⓘ</span></h2>
+          <div class="ex-target">${repsLabel(ex)}</div>
+          ${pill}
+        </div>
+        <div class="ex-right">
+          <div class="last">
+            <div class="k">Last</div>
+            ${ last ? `<div class="v">${lastVal}</div>` : `<div class="v none">—</div>` }
+          </div>
+          <div class="ex-btns">
+            <button class="swapbtn" title="Swap for an alternative" onclick="swapLift('${ex.id}')">⇄</button>
+            <button class="rm" title="Remove" onclick="removeLift('${ex.id}')">×</button>
+          </div>
+        </div>
+      </div>
+      <div class="colhdr"><span>Set</span><span>Weight</span><span>Reps</span></div>
+      <div class="setrows" data-rows="${ex.id}">${rows}</div>
+      <div class="ex-foot">
+        <button class="addset" onclick="addSetRow('${ex.id}')">+ add set</button>
+        <button class="restbtn" onclick="startRest(${restSec})">⏱ rest ${fmtRest(restSec)}</button>
+        <button class="savelift${saved?' done':''}" id="sv-${ex.id}" onclick="saveLift('${ex.id}')">${saved?'✓ Saved':'Save lift'}</button>
+      </div>`;
+    list.appendChild(card);
+  });
+
+  if(!exs.length && currentDay==='C'){
+    list.insertAdjacentHTML('beforeend','<div class="empty" style="padding:4px 2px 12px">Add the lifts you did, in order.</div>');
+  }
+  list.appendChild(buildAddLift());
+}
+
+function buildAddLift(){
+  const groups = CAT_ORDER.map(cat=>{
+    const opts = (CAND[cat]||[])
+      .filter(id=> !workList.some(c=>c.id===id))
+      .map(id=> `<option value="${id}">${EXDEF[id].name}</option>`).join('');
+    return opts ? `<optgroup label="${CAT_LABEL[cat]}">${opts}</optgroup>` : '';
+  }).join('');
+  const box = document.createElement('div');
+  box.className = 'addlift';
+  box.innerHTML = `
+    <div class="addlift-row">
+      <select id="liftpick" onchange="onLiftPick()">
+        <option value="">Add a lift…</option>
+        ${groups}
+        <option value="__c">Other — type a name…</option>
+      </select>
+      <button class="addbtn" onclick="addPickedLift()">Add</button>
+    </div>
+    <input id="customname" class="hidden" placeholder="e.g. Sled push, Pallof press">`;
+  return box;
+}
+
+function onLiftPick(){
+  const v = document.getElementById('liftpick').value;
+  document.getElementById('customname').classList.toggle('hidden', v !== '__c');
+  if(v==='__c') document.getElementById('customname').focus();
+}
+
+function addPickedLift(){
+  const sel = document.getElementById('liftpick');
+  const v = sel.value;
+  if(!v){ return; }
+  let lift;
+  if(v==='__c'){
+    const name = (document.getElementById('customname').value || '').trim();
+    if(!name){ toast('Type a lift name'); return; }
+    const id = 'c_' + name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+    if(!id || id==='c_'){ toast('Use letters or numbers'); return; }
+    if(workList.some(c=>c.id===id)){ toast('Already added'); return; }
+    NAMES_REG[id] = name;
+    lift = {id, name, sets:3};
+  } else {
+    if(workList.some(c=>c.id===v)){ toast('Already added'); return; }
+    lift = EXDEF[v];
+  }
+  workList.push(lift);
+  renderTrain();
+}
+
+function removeLift(id){
+  workList = workList.filter(e=> e.id !== id);
+  renderTrain();
+}
+
+// offer alternatives that train the same pattern, then swap one in
+function swapLift(oldId){
+  const card = document.querySelector(`#exlist .ex[data-card="${oldId}"]`);
+  if(!card) return;
+  const existing = card.querySelector('.swaptray');
+  if(existing){ existing.remove(); return; }      // tapping again closes it
+  const cat = PATTERN[oldId];
+  if(!cat){ toast('No alternatives for a custom lift — remove and add another'); return; }
+  const inWork = new Set(workList.map(e=>e.id));
+  const role = EXDEF[oldId] ? EXDEF[oldId].role : 'accessory';
+  let cands = (CAND[cat]||[]).filter(id=> id!==oldId && !inWork.has(id));
+  cands.sort((a,b)=> (EXDEF[a].role===role?0:1) - (EXDEF[b].role===role?0:1));   // same role first
+  cands = cands.slice(0,6);
+  if(!cands.length){ toast('No other options in that group'); return; }
+  const chips = cands.map(id=> `<button class="swapchip" onclick="doSwap('${oldId}','${id}')">${EXDEF[id].name}</button>`).join('');
+  const tray = `<div class="swaptray"><span class="swaptray-l">Don't feel like it? Swap for:</span>${chips}<button class="swapchip cancel" onclick="swapLift('${oldId}')">✕ keep</button></div>`;
+  card.querySelector('.ex-head').insertAdjacentHTML('afterend', tray);
+}
+function doSwap(oldId, newId){
+  const i = workList.findIndex(e=> e.id===oldId);
+  if(i<0 || !EXDEF[newId]) return;
+  workList[i] = EXDEF[newId];
+  if(activeDraft && activeDraft.entries[oldId]){ delete activeDraft.entries[oldId]; persist(); }
+  renderTrain();
+  toast(`Swapped to ${EXDEF[newId].name}`);
+}
+
+// stylised front/back muscle map; `active` = Set of highlighted region keys
+function bodySVG(active){
+  const on='var(--amber)', off='#26344C', st='#3C4E6E';
+  const c = k => active.has(k) ? on : off;
+  const sh = (x,y,w,h,r,k)=> `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${c(k)}" stroke="${st}" stroke-width="1"/>`;
+  const el = (cx,cy,rx,ry,k)=> `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${c(k)}" stroke="${st}" stroke-width="1"/>`;
+  return `<svg viewBox="0 0 260 210" width="100%" style="max-width:300px;display:block;margin:6px auto 0">
+    <!-- FRONT -->
+    <circle cx="65" cy="20" r="11" fill="#172234" stroke="${st}"/>
+    ${el(45,46,9,7,'delts')}${el(85,46,9,7,'delts')}
+    ${sh(50,40,30,22,6,'chest')}
+    ${sh(36,50,11,26,5,'biceps')}${sh(83,50,11,26,5,'biceps')}
+    ${sh(54,64,22,26,5,'abs')}
+    ${sh(33,78,10,24,5,'forearms')}${sh(87,78,10,24,5,'forearms')}
+    ${sh(52,94,12,42,5,'quads')}${sh(66,94,12,42,5,'quads')}
+    <rect x="54" y="140" width="9" height="32" rx="4" fill="#172234" stroke="${st}"/>
+    <rect x="67" y="140" width="9" height="32" rx="4" fill="#172234" stroke="${st}"/>
+    <text x="65" y="192" text-anchor="middle" fill="var(--muted-dim)" font-size="10" font-family="Inter">Front</text>
+    <!-- BACK -->
+    <circle cx="195" cy="20" r="11" fill="#172234" stroke="${st}"/>
+    ${sh(180,40,30,12,5,'traps')}
+    ${el(176,48,8,7,'reardelts')}${el(214,48,8,7,'reardelts')}
+    ${sh(182,52,12,22,4,'lats')}${sh(196,52,12,22,4,'lats')}
+    ${sh(166,50,11,26,5,'triceps')}${sh(213,50,11,26,5,'triceps')}
+    ${sh(184,76,22,12,4,'lowerback')}
+    ${sh(182,90,26,16,6,'glutes')}
+    ${sh(183,108,12,34,5,'hams')}${sh(195,108,12,34,5,'hams')}
+    ${sh(184,144,10,28,5,'calves')}${sh(196,144,10,28,5,'calves')}
+    <text x="195" y="192" text-anchor="middle" fill="var(--muted-dim)" font-size="10" font-family="Inter">Back</text>
+  </svg>`;
+}
+
+function openInfo(id){
+  const ex = EXDEF[id];
+  const card = document.getElementById('infomodal-card');
+  if(!ex){
+    card.innerHTML = `<div class="dm-h">${getName(id)}</div>
+      <div class="dm-sub">Custom lift — no diagram on file. It still tracks your weights and reps like any other.</div>
+      <button class="btn btn-primary" onclick="closeInfo()">Done</button>`;
+  } else {
+    const m = MUSC[ex.cat] || {regions:[], label:''};
+    const cue = CUES[id] || '';
+    card.innerHTML = `
+      <div class="dm-h">${ex.name}</div>
+      <div class="dm-sub">Works: <b style="color:var(--amber)">${m.label}</b> · target ${repsLabel(ex)}</div>
+      ${bodySVG(new Set(m.regions))}
+      ${cue ? `<div class="info-cue"><span class="info-cue-l">Form</span>${cue}</div>` : ''}
+      <button class="btn btn-primary" onclick="closeInfo()">Done</button>`;
+  }
+  document.getElementById('infomodal').classList.add('show');
+}
+function closeInfo(){ document.getElementById('infomodal').classList.remove('show'); }
+
+function addSetRow(exId){
+  const cont = document.querySelector(`#exlist .setrows[data-rows="${exId}"]`);
+  if(!cont) return;
+  const idx = cont.querySelectorAll('.set').length;
+  const ph = (cont.querySelector('input[data-f="w"]') || {}).placeholder || '';
+  cont.insertAdjacentHTML('beforeend', setRowHTML(exId, idx, ph));
+}
+
+function fmt(n){ return (Math.round(n*10)/10).toString().replace(/\.0$/,''); }
+
+function lastSession(){
+  return sessions.slice().sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id)[0] || null;
+}
+// most recent lifting session (ignores activity logs) — drives the generator
+function lastLiftSession(){
+  return sessions.filter(s=> s.kind!=='activity' && s.entries && Object.keys(s.entries).length)
+    .sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id)[0] || null;
+}
+
+// days between the planned (date field) session and the last logged one
+function gapDays(lastDate){
+  const planned = document.getElementById('sessdate').value;
+  if(!planned || !lastDate) return 7;
+  const ms = new Date(planned+'T00:00:00') - new Date(lastDate+'T00:00:00');
+  const d = Math.round(ms/86400000);
+  return d > 0 ? d : 1;
+}
+
+// THE ENGINE — builds a full session. type 'auto' rotates off the last workout;
+// other types ('quad','hinge','push','pull','arms','upper','lower') let you
+// override the emphasis. All stay balanced, vary the lifts, and ease axial work
+// on back-to-back days.
+const PLAN_TYPES = [
+  ['auto','Auto'],['quad','Quad'],['hinge','Hinge'],['push','Push'],
+  ['pull','Pull'],['arms','Arms'],['upper','Upper'],['lower','Lower']
+];
+
+function buildPlan(type){
+  type = type || 'auto';
+  const last = lastLiftSession();
+  const n = sessions.filter(s=> s.kind!=='activity').length;
+  const did = new Set(last ? Object.keys(last.entries) : []);
+  const didCat = c => [...did].some(id=> PATTERN[id]===c);
+  const backToBack = last ? gapDays(last.date) <= 1 : false;
+  const avoid = new Set(did);
+  const avoidLower = backToBack ? new Set([...did, ...HIGH_FATIGUE]) : avoid;
+
+  function pick(cats, roles, skip, salt){
+    let cand = [];
+    cats.forEach(c=> cand = cand.concat(CAND[c]||[]));
+    cand = cand.filter(id=> roles.includes(EXDEF[id].role));
+    if(!cand.length) return null;
+    const start = (n + salt) % cand.length;
+    for(let i=0;i<cand.length;i++){ const id = cand[(start+i)%cand.length]; if(!skip.has(id)) return id; }
+    return cand[start];
+  }
+
+  const lowerLead = didCat('knee') ? 'hinge' : (didCat('hinge') ? 'knee' : (n%2 ? 'hinge' : 'knee'));
+  const pushLead  = didCat('hpush') ? 'vpush' : (didCat('vpush') ? 'hpush' : (n%2 ? 'vpush' : 'hpush'));
+  const otherPush = pushLead==='hpush' ? 'vpush' : 'hpush';
+  const pullLead  = didCat('vpull') ? 'hpull' : (didCat('hpull') ? 'vpull' : (n%2 ? 'hpull' : 'vpull'));
+
+  const ids = [];
+  const add = id => { if(id && !ids.includes(id)) ids.push(id); };
+  const used = () => new Set([...avoid, ...ids]);
+  const b2bNote = backToBack ? ' Heavy axial work is eased since you trained yesterday.' : '';
+  let title, why;
+
+  if(type==='upper'){
+    add(pick([pushLead],['compound'],avoid,2));
+    add(pick([otherPush],['compound','accessory'],used(),4));
+    add(pick(['vpull'],['compound'],avoid,3));
+    add(pick(['hpull'],['compound'],used(),5));
+    add(pick(['vpush'],['iso'],used(),6));
+    add(pick(['biceps'],['iso'],avoid,7));
+    add(pick(['triceps'],['iso','compound'],avoid,8));
+    title='Upper body'; why='Upper-body session — pressing, pulling, shoulders and arms, no legs today.'+b2bNote;
+  } else if(type==='lower'){
+    add(pick(['knee'],['compound'],avoidLower,0));
+    add(pick(['hinge'],['compound'],avoidLower,1));
+    add(pick(['knee'],['accessory','iso'],used(),2));
+    add(pick(['hinge'],['iso','accessory'],used(),3));
+    add(pick(['calf'],['iso'],avoid,4));
+    add(pick(['core'],['iso'],avoid,5));
+    title='Lower body'; why='Legs and posterior chain — quads, hamstrings, glutes and calves.'+b2bNote;
+  } else if(type==='arms'){
+    add(pick(['biceps'],['iso'],avoid,1));
+    add(pick(['triceps'],['iso','compound'],avoid,2));
+    add(pick(['biceps'],['iso'],used(),3));
+    add(pick(['triceps'],['iso'],used(),4));
+    add(pick([pushLead,otherPush],['compound'],avoid,5));
+    add(pick(['vpull','hpull'],['compound'],avoid,6));
+    add(pick([lowerLead],['compound'],avoidLower,0));
+    title='Full body · arms lead'; why='Extra biceps and triceps volume, rounded out with a press, a pull and one big lower lift.'+b2bNote;
+  } else if(type==='push'){
+    add(pick(['hpush'],['compound'],avoid,1));
+    add(pick(['vpush'],['compound'],used(),2));
+    add(pick(['hpush','vpush'],['iso','accessory'],used(),3));
+    add(pick(['vpull','hpull'],['compound'],avoid,4));
+    add(pick([lowerLead],['compound'],avoidLower,0));
+    add(pick(['triceps'],['iso'],avoid,5));
+    add(pick(['core'],['iso'],avoid,6));
+    title='Full body · push lead'; why='Pressing emphasis — chest and shoulders get the volume, balanced by a pull and a leg lift.'+b2bNote;
+  } else if(type==='pull'){
+    add(pick(['vpull'],['compound'],avoid,1));
+    add(pick(['hpull'],['compound'],used(),2));
+    add(pick(['hpull','vpull'],['iso'],used(),3));
+    add(pick(['hpush','vpush'],['compound'],avoid,4));
+    add(pick([lowerLead],['compound'],avoidLower,0));
+    add(pick(['biceps'],['iso'],avoid,5));
+    add(pick(['core'],['iso'],avoid,6));
+    title='Full body · pull lead'; why='Pulling emphasis — back, lats and biceps get the volume, balanced by a press and a leg lift.'+b2bNote;
+  } else {
+    const lead = type==='quad' ? 'knee' : type==='hinge' ? 'hinge' : lowerLead;
+    const otherLower = lead==='knee' ? 'hinge' : 'knee';
+    add(pick([lead],['compound'],avoidLower,0));
+    add(pick([otherLower],['accessory','iso'],avoid,1));
+    add(pick([pushLead],['compound'],avoid,2));
+    add(pick([pullLead],['compound'],avoid,3));
+    add(pick([otherPush],['iso','accessory','compound'],used(),4));
+    add(pick(['hpull','vpull'],['iso'],used(),5));
+    add(pick(['biceps'],['iso'],avoid,6));
+    add(pick(['triceps'],['iso','compound'],avoid,7));
+    add(pick([ n%2 ? 'calf' : 'core' ],['iso'],avoid,8));
+    title = `Full body · ${lead==='knee'?'quad':'hinge'} lead`;
+    why = (type==='auto')
+      ? (last
+          ? `Last session trained ${didCat('knee')?'quads':didCat('hinge')?'the posterior chain':'upper body'}, so this one leads with ${lead==='knee'?'a squat':'a hinge'} and rotates fresh variations across pressing, pulling and arms.${b2bNote}`
+          : 'No history yet — a balanced full-body session across every major pattern. Log it and the next one programs off what you trained.')
+      : `${lead==='knee'?'Quad':'Hinge'}-led full body — balanced pressing, pulling and arms.${b2bNote}`;
+  }
+  return { type, title, why, ids: ids.filter(Boolean) };
+}
+
+function planFromLast(){ return buildPlan(currentPlanType); }
+
+function renderPlanBanner(plan){
+  const el = document.getElementById('planbanner');
+  if(currentDay !== 'N'){ el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  const planned = document.getElementById('sessdate').value;
+  const d = new Date(planned+'T00:00:00');
+  const when = isNaN(d) ? 'Next session' : d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
+  el.innerHTML = `<div class="pb-title">${when} · ${plan.title}</div>
+    <div class="pb-why">${plan.why}</div>
+    <div class="pb-why" style="margin-top:6px"><b>Targets:</b> compounds ${SCHEME.compound.sets}×${SCHEME.compound.lo}–${SCHEME.compound.hi}, isolation ${SCHEME.iso.sets}×${SCHEME.iso.lo}–${SCHEME.iso.hi}, ~1–2 min rest.</div>`;
+}
+
+function buildAutoPlan(){
+  const last = lastLiftSession();
+  // default the date to the morning after your last lifting session
+  if(last){
+    const d = new Date(last.date+'T00:00:00'); d.setDate(d.getDate()+1);
+    document.getElementById('sessdate').value = d.toISOString().slice(0,10);
+  }
+  const plan = planFromLast();
+  currentPlanTitle = plan.title;
+  workList = plan.ids.map(id=> EXDEF[id]).filter(Boolean);
+  renderPlanBanner(plan);
+  renderTypePick();
+}
+
+function renderTypePick(){
+  const el = document.getElementById('typepick');
+  if(currentDay!=='N'){ el.classList.remove('show'); return; }
+  el.classList.add('show');
+  el.innerHTML = PLAN_TYPES.map(([t,label])=>
+    `<button class="typechip${currentPlanType===t?' on':''}" onclick="setPlanType('${t}')">${label}</button>`).join('');
+}
+
+function setPlanType(t){
+  currentPlanType = t;
+  const plan = planFromLast();
+  currentPlanTitle = plan.title;
+  workList = plan.ids.map(id=> EXDEF[id]).filter(Boolean);
+  renderPlanBanner(plan);
+  renderTypePick();
+  renderTrain();
+}
+
+function onDateChange(){
+  if(currentDay==='N'){            // regenerate — a 1-day gap trains differently to a 7-day gap
+    const plan = planFromLast();
+    currentPlanTitle = plan.title;
+    workList = plan.ids.map(id=> EXDEF[id]).filter(Boolean);
+    renderPlanBanner(plan);
+    renderTrain();
+  }
+}
+
+function setDay(d){
+  // if there's an in-progress draft from a different mode, finalise it so work isn't lost
+  if(activeDraft && activeDraft.mode!==d){
+    if(Object.keys(activeDraft.entries).length){ delete activeDraft.draft; persist(); }
+    else { sessions = sessions.filter(s=> s!==activeDraft); }
+    activeDraft = null;
+  }
+  currentDay = d;
+  ['N','C','X'].forEach(x=> document.getElementById('day-'+x).classList.toggle('on', d===x));
+  if(d==='N'){ currentPlanType = 'auto'; buildAutoPlan(); }
+  else { workList = (d==='C') ? [] : workList; document.getElementById('planbanner').classList.add('hidden'); document.getElementById('typepick').classList.remove('show'); document.getElementById('sessdate').value = new Date().toISOString().slice(0,10); }
+  renderTrain();
+}
+
+// ── Rest timer ──────────────────────────────────────────────────────────────
+let restInt, restEnd;
+function startRest(sec){
+  clearInterval(restInt);
+  restEnd = Date.now() + sec*1000;
+  const el = document.getElementById('resttimer');
+  el.classList.add('show'); el.classList.remove('done');
+  tickRest();
+  restInt = setInterval(tickRest, 250);
+}
+function tickRest(){
+  const el = document.getElementById('resttimer');
+  const left = Math.round((restEnd - Date.now())/1000);
+  if(left <= 0){
+    clearInterval(restInt);
+    el.classList.add('done');
+    el.textContent = 'Rest done — go';
+    setTimeout(()=>{ el.classList.remove('show','done'); }, 4000);
+    return;
+  }
+  el.textContent = `Rest ${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
+}
+function stopRest(){
+  clearInterval(restInt);
+  document.getElementById('resttimer').classList.remove('show','done');
+}
+
+function clearInputs(){
+  document.querySelectorAll('#exlist input').forEach(i=> i.value='');
+}
+
+function activityFormHTML(){
+  const opts = ACTIVITIES.map(a=> `<option value="${a}">${a}</option>`).join('');
+  return `<div class="actform">
+    <label class="fld">
+      <span class="fld-l">Activity</span>
+      <select id="act-type" onchange="onActType()">${opts}</select>
+    </label>
+    <input id="act-custom" class="actcustom hidden" placeholder="Name your activity">
+    <div class="fld-row">
+      <label class="fld"><span class="fld-l">Duration (min)</span>
+        <input id="act-dur" inputmode="numeric" placeholder="45"></label>
+      <label class="fld"><span class="fld-l">Distance (km) <em>opt</em></span>
+        <input id="act-dist" inputmode="decimal" placeholder="—"></label>
+    </div>
+    <label class="fld">
+      <span class="fld-l">Intensity</span>
+      <select id="act-int"><option value="">—</option><option>Easy</option><option selected>Moderate</option><option>Hard</option></select>
+    </label>
+    <label class="fld"><span class="fld-l">Note <em>opt</em></span>
+      <input id="act-note" placeholder="e.g. won 3–1, felt strong"></label>
+  </div>`;
+}
+function onActType(){
+  const sel = document.getElementById('act-type');
+  const c = document.getElementById('act-custom');
+  if(!sel || !c) return;
+  c.classList.toggle('hidden', sel.value !== 'Other');
+}
+
+// read the set rows currently entered for one lift card
+function readCardSets(ex){
+  const sets = [];
+  document.querySelectorAll(`#exlist .setrows[data-rows="${ex.id}"] .set`).forEach(row=>{
+    let w = parseFloat(row.querySelector('input[data-f="w"]').value);
+    const r = parseInt(row.querySelector('input[data-f="r"]').value);
+    if(ex.bw && (isNaN(w) || w<0)) w = 0;
+    const okW = ex.bw ? (w>=0) : (!isNaN(w) && w>0);
+    if(okW && !isNaN(r) && r>0) sets.push({w, r});
+  });
+  return sets;
+}
+
+function ensureDraft(){
+  if(activeDraft) return activeDraft;
+  const date = document.getElementById('sessdate').value || new Date().toISOString().slice(0,10);
+  const label = currentDay==='N' ? (currentPlanTitle || 'Session') : 'Custom';
+  activeDraft = { id:Date.now(), date, day:label, mode:currentDay,
+                  plan: workList.map(e=>e.id), entries:{}, draft:true };
+  sessions.push(activeDraft);
+  return activeDraft;
+}
+
+// save one lift right away (persists immediately)
+async function saveLift(exId){
+  const ex = workList.find(e=>e.id===exId);
+  if(!ex) return;
+  const sets = readCardSets(ex);
+  if(!sets.length){ toast('Enter a set first'); return; }
+  const d = ensureDraft();
+  d.entries[exId] = sets;
+  d.plan = workList.map(e=>e.id);
+  d.date = document.getElementById('sessdate').value || d.date;
+  await persist();
+  const card = document.querySelector(`#exlist .ex[data-card="${exId}"]`);
+  if(card) card.classList.add('saved');
+  const btn = document.getElementById('sv-'+exId);
+  if(btn){ btn.classList.add('done'); btn.textContent = '✓ Saved'; }
+  toast(`${ex.name} saved`);
+}
+
+// ── Post-session feedback ───────────────────────────────────────────────────
+function topOf(sets, bw){
+  return bw
+    ? sets.reduce((m,s)=> (s.r>m.r || (s.r===m.r && s.w>m.w)) ? s : m, sets[0])
+    : sets.reduce((m,s)=> s.w>m.w ? s : m, sets[0]);
+}
+function buildFeedback(sess){
+  const earlier = s => (s.date < sess.date) || (s.date===sess.date && s.id < sess.id);
+  const prior = sessions.filter(s=> s!==sess && s.kind!=='activity' && s.entries && earlier(s))
+                        .sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id);
+  let totalSets=0, totalVol=0, prs=0, cleared=0, withTarget=0, newCount=0, below=0;
+  const lifts=[]; const stalls=[]; const groups=new Set(); let jump=null;
+  const GROUP = {knee:'legs',hinge:'legs',calf:'legs',hpush:'push',vpush:'push',hpull:'pull',vpull:'pull',biceps:'arms',triceps:'arms',core:'core'};
+  Object.keys(sess.entries).forEach(id=>{
+    const ex = EXDEF[id] || {id, name:getName(id)};
+    const sets = sess.entries[id];
+    totalSets += sets.length;
+    sets.forEach(s=> totalVol += (s.w||0)*s.r);
+    if(PATTERN[id]) groups.add(GROUP[PATTERN[id]]);
+    const cur = topOf(sets, ex.bw);
+    let bestPrev=0, bestPrevR=0;
+    prior.forEach(s=>{ if(s.entries[id]) s.entries[id].forEach(st=>{ if(st.w>bestPrev)bestPrev=st.w; if(st.r>bestPrevR)bestPrevR=st.r; }); });
+    const prevSess = prior.find(s=> s.entries[id] && s.entries[id].length);
+    let dir='new', text='first time logged — baseline';
+    if(prevSess){
+      const prev = topOf(prevSess.entries[id], ex.bw);
+      if(ex.bw){
+        if(cur.w>prev.w){ dir='up'; text=`▲ +${fmt(cur.w-prev.w)} kg added`; }
+        else if(cur.r>prev.r){ dir='up'; text=`▲ +${cur.r-prev.r} reps (${cur.r})`; }
+        else if(cur.r<prev.r){ dir='down'; text=`▼ ${cur.r-prev.r} reps`; }
+        else { dir='same'; text=`held ${cur.r} reps`; }
+        if(cur.w>bestPrev || (cur.w===bestPrev && cur.r>bestPrevR)) prs++;
+      } else {
+        const dw = cur.w-prev.w;
+        if(dw>0){ dir='up'; text=`▲ +${fmt(dw)} kg → ${fmt(cur.w)}`; }
+        else if(dw<0){ dir='down'; text=`▼ ${fmt(-dw)} kg`; }
+        else {
+          const dr = cur.r-prev.r;
+          if(dr>0){ dir='up'; text=`▲ +${dr} reps @ ${fmt(cur.w)} kg`; }
+          else if(dr<0){ dir='down'; text=`▼ ${-dr} reps`; }
+          else { dir='same'; text=`held ${fmt(cur.w)} kg × ${cur.r}`; }
+        }
+        if(cur.w>bestPrev) prs++;
+        if(cur.w===prev.w && cur.r<=prev.r) stalls.push(ex.name);
+      }
+    }
+    if(dir==='new') newCount++;
+    if(EXDEF[id]){
+      withTarget++;
+      const lo = effLo(ex), hi = effHi(ex);
+      const repsTop = ex.bw ? cur.r : Math.min(...sets.filter(s=>s.w===cur.w).map(s=>s.r));
+      if(repsTop >= hi) cleared++;
+      else if(repsTop < lo) below++;
+      // a weight jump that dropped reps below the target floor
+      if(!ex.bw && !jump){
+        for(let i=1;i<sets.length;i++){
+          if(sets[i].w > sets[i-1].w && sets[i].r < lo){ jump = {name:ex.name, w:sets[i].w, r:sets[i].r}; break; }
+        }
+      }
+    }
+    lifts.push({name:ex.name, dir, text});
+  });
+
+  const notes=[];
+  if(prs>0) notes.push(`${prs} personal best${prs>1?'s':''} today — strong work.`);
+  if(newCount) notes.push(`${newCount} of ${withTarget||newCount} lift${(withTarget||newCount)>1?'s':''} logged for the first time — baselines set, so you'll see progress against them from next session.`);
+  if(withTarget && !(cleared===0 && newCount===withTarget))
+    notes.push(`You cleared the top of the rep range on ${cleared} of ${withTarget} lift${withTarget>1?'s':''}${cleared?' — those step up in weight next time':''}.`);
+  if(withTarget && below >= Math.ceil(withTarget/2))
+    notes.push(`Most of your top sets landed below the target rep range — the weight may be a touch heavy on those. Easing it slightly to hit the full reps will drive better progress.`);
+  if(jump) notes.push(`${jump.name}: the jump to ${fmt(jump.w)} kg dropped you to ${jump.r} reps — smaller increments will keep your reps in the target range.`);
+  if(stalls.length) notes.push(`${stalls.slice(0,2).join(' and ')} held flat — keep the weight and chase reps, or take a lighter week if it lingers.`);
+  if(groups.size>=3){
+    const order=['legs','push','pull','arms','core']; const g=order.filter(x=> groups.has(x));
+    notes.push(`Covered ${g.slice(0,-1).join(', ')} and ${g[g.length-1]} — a well-balanced full-body session.`);
+  }
+  const liftSorted = sessions.filter(s=> s.kind!=='activity' && s.entries).sort((a,b)=> b.date.localeCompare(a.date)||b.id-a.id);
+  let noLeg=0;
+  for(const s of liftSorted){ const hasLeg=Object.keys(s.entries).some(id=> ['knee','hinge','calf'].includes(PATTERN[id])); if(hasLeg) break; noLeg++; }
+  if(noLeg>=2) notes.push(`That's ${noLeg} sessions without legs — a lower-body day is due.`);
+
+  return { volume: Math.round(totalVol), sets: totalSets, prs, lifts, notes: notes.slice(0,5) };
+}
+
+function showRecap(fb, sess){
+  const d = new Date(sess.date+'T00:00:00');
+  const dstr = isNaN(d) ? sess.date : d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
+  const liftsHTML = fb.lifts.map(l=> `<div class="rc-lift"><span>${l.name}</span><span class="rc-${l.dir}">${l.text}</span></div>`).join('');
+  const notesHTML = fb.notes.map(n=> `<div class="rc-note">${n}</div>`).join('');
+  document.getElementById('recap-card').innerHTML = `
+    <div class="rc-h">Session<span class="x">.</span> done</div>
+    <div class="rc-sub">${sess.day} · ${dstr}</div>
+    <div class="rc-stats">
+      <div><div class="rc-n">${fb.volume.toLocaleString()}</div><div class="rc-k">kg volume</div></div>
+      <div><div class="rc-n">${fb.sets}</div><div class="rc-k">sets</div></div>
+      <div><div class="rc-n" style="${fb.prs?'color:var(--amber)':''}">${fb.prs}</div><div class="rc-k">PRs</div></div>
+    </div>
+    <div class="rc-lifts">${liftsHTML}</div>
+    ${notesHTML ? `<div class="rc-notes">${notesHTML}</div>` : ''}
+    <button class="btn btn-primary" onclick="closeRecap()">Done</button>`;
+  document.getElementById('recap').classList.add('show');
+}
+function closeRecap(){ document.getElementById('recap').classList.remove('show'); }
+
+async function saveSession(){
+  const date = document.getElementById('sessdate').value || new Date().toISOString().slice(0,10);
+
+  if(currentDay === 'X'){                                   // activity log
+    let activity = document.getElementById('act-type').value;
+    if(activity==='Other'){ activity = (document.getElementById('act-custom').value||'').trim() || 'Activity'; }
+    const dur = parseInt(document.getElementById('act-dur').value);
+    const dist = parseFloat(document.getElementById('act-dist').value);
+    const intensity = document.getElementById('act-int').value;
+    const note = (document.getElementById('act-note').value||'').trim();
+    if(isNaN(dur) || dur<=0){ toast('Enter a duration'); return; }
+    sessions.push({ id:Date.now(), date, kind:'activity', activity,
+      durationMin:dur, distanceKm:isNaN(dist)?null:dist, intensity:intensity||null, note });
+    await persist();
+    renderProgress();
+    setDay('N');
+    toast(`${activity} logged`);
+    return;
+  }
+
+  // sweep every card into the draft (captures anything not individually saved)
+  const d = ensureDraft();
+  d.date = date;
+  workList.forEach(ex=>{
+    const sets = readCardSets(ex);
+    if(sets.length) d.entries[ex.id] = sets;
+  });
+  if(!Object.keys(d.entries).length){
+    sessions = sessions.filter(s=> s!==d); activeDraft=null;
+    toast('Add a lift and enter a set'); return;
+  }
+  // finalise
+  d.day = currentDay==='N' ? (currentPlanTitle || 'Session') : 'Custom';
+  delete d.draft;
+  const fb = buildFeedback(d);     // compare against history before clearing
+  d.recap = fb;
+  activeDraft = null;
+  await persist();
+
+  renderProgress();
+  setDay('N');                       // roll forward to the next programmed session
+  showRecap(fb, d);
+}
+
+function switchTab(t){
+  const train = t==='train';
+  document.getElementById('view-train').classList.toggle('hidden', !train);
+  document.getElementById('view-prog').classList.toggle('hidden', train);
+  document.getElementById('savebar').classList.toggle('hidden', !train);
+  document.getElementById('tab-train').classList.toggle('on', train);
+  document.getElementById('tab-prog').classList.toggle('on', !train);
+  if(!train) renderProgress();
+}
+
+function spark(points){
+  if(points.length<2) return '';
+  const w=300,h=54,pad=6;
+  const xs=points.map((_,i)=>i), ys=points.map(p=>p);
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  const rng=(maxY-minY)||1;
+  const X=i=> pad + (i/(points.length-1))*(w-2*pad);
+  const Y=v=> h-pad - ((v-minY)/rng)*(h-2*pad);
+  let d='';
+  points.forEach((p,i)=>{ d += (i?' L':'M')+X(i).toFixed(1)+' '+Y(p).toFixed(1); });
+  const lastX=X(points.length-1), lastY=Y(points[points.length-1]);
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <path d="${d}" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="3.5" fill="var(--amber)"/>
+  </svg>`;
+}
+
+function renderProgress(){
+  const wrap = document.getElementById('proglist');
+  const allIds = [...new Set([
+    ...Object.keys(EXDEF),
+    ...sessions.flatMap(s=> Object.keys(s.entries||{}))
+  ])];
+  let html='';
+  let any=false;
+  allIds.forEach(id=>{
+    const series = sessions
+      .filter(s=> s.entries && s.entries[id] && s.entries[id].length)
+      .sort((a,b)=> a.date.localeCompare(b.date))
+      .map(s=>{
+        const top = s.entries[id].reduce((m,x)=> x.w>m.w?x:m, s.entries[id][0]);
+        return {date:s.date, w:top.w, r:top.r};
+      });
+    if(!series.length) return;
+    any=true;
+    const cur = series[series.length-1];
+    const best = series.reduce((m,x)=> x.w>m.w?x:m, series[0]);
+    let delta='';
+    if(series.length>1){
+      const prev = series[series.length-2].w;
+      const diff = cur.w - prev;
+      if(diff>0) delta=`<span class="delta up">▲ +${fmt(diff)} kg vs last</span>`;
+      else if(diff<0) delta=`<span class="delta flat">▼ ${fmt(diff)} kg vs last</span>`;
+      else delta=`<span class="delta flat">— held at ${fmt(cur.w)} kg</span>`;
+    }
+    html += `<div class="pex">
+      <div class="pex-top">
+        <h3 class="pex-name">${getName(id)}</h3>
+        <div class="pstats">
+          <div class="stat"><div class="k">Top set</div><div class="v">${fmt(cur.w)}<small> ×${cur.r}</small></div></div>
+          <div class="stat"><div class="k">Best</div><div class="v">${fmt(best.w)}<small> kg</small></div></div>
+        </div>
+      </div>
+      ${spark(series.map(p=>p.w))}
+      ${delta||'<span class="delta flat">First entry — baseline set</span>'}
+    </div>`;
+  });
+  wrap.innerHTML = any ? html : '<div class="empty">No sessions logged yet. Log your first one in the Train tab and your numbers will start tracking here.</div>';
+  // nudge to restore if the log looks freshly empty (only the built-in seed sessions)
+  const userData = sessions.some(s=> !SEEDS.some(sd=> sd.id===s.id));
+  const hint = document.getElementById('imphint');
+  if(hint){
+    if(!userData){ hint.classList.add('show'); hint.innerHTML = `Starting fresh? If you logged workouts in an earlier version, tap <b>Import backup</b> below to restore them.`; }
+    else hint.classList.remove('show');
+  }
+  renderHistory();
+}
+
+function renderHistory(){
+  const wrap = document.getElementById('histlist');
+  if(!sessions.length){ wrap.innerHTML='<div class="empty">Nothing logged yet.</div>'; return; }
+  const sorted = [...sessions].sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id);
+  wrap.innerHTML = sorted.map(s=>{
+    const d = new Date(s.date+'T00:00:00');
+    const dstr = isNaN(d) ? s.date : d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'});
+
+    if(s.kind==='activity'){
+      const bits = [`${s.durationMin} min`];
+      if(s.distanceKm) bits.push(`${fmt(s.distanceKm)} km`);
+      if(s.intensity) bits.push(s.intensity.toLowerCase());
+      const note = s.note ? `<div class="hx"><span class="hx-n" style="color:var(--muted)">${s.note}</span></div>` : '';
+      return `<div class="hitem">
+        <div class="hrow act">
+          <div class="hd"><b>${s.activity}</b> · ${bits.join(' · ')}<div class="dt">${dstr} · activity</div></div>
+          <button class="del" onclick="delSession(${s.id})">Delete</button>
+        </div>
+        ${note ? `<div class="hdetail open">${note}</div>` : ''}
+      </div>`;
+    }
+
+    const ids = s.entries ? Object.keys(s.entries) : [];
+    const label = (s.day==='A'||s.day==='B') ? `Day ${s.day}` : (s.day || 'Session');
+    const detail = ids.length ? ids.map(id=>{
+      const ex = EXDEF[id];
+      const arr = Array.isArray(s.entries[id]) ? s.entries[id] : [];
+      const setsTxt = arr.map(st=>{
+        const w = (ex && ex.bw && st.w===0) ? 'BW' : fmt(st.w)+' kg';
+        return `${w} × ${st.r}`;
+      }).join('   ');
+      return `<div class="hx"><span class="hx-n">${getName(id)}</span><span class="hx-s">${setsTxt}</span></div>`;
+    }).join('') : '<div class="hx"><span class="hx-n" style="color:var(--muted-dim)">No exercise detail recorded for this session</span></div>';
+    let recap = '';
+    if(ids.length){
+      const r = buildFeedback(s);
+      const notes = (r.notes||[]).map(n=> `<div class="hrecap-note">${n}</div>`).join('');
+      recap = `<div class="hrecap"><span>${(r.volume||0).toLocaleString()} kg · ${r.sets} sets${r.prs?` · <b>${r.prs} PR${r.prs>1?'s':''}</b>`:''}</span></div>${notes}`;
+    }
+    return `<div class="hitem">
+      <div class="hrow">
+        <div class="hd"><b>${label}</b> · ${ids.length} lift${ids.length!==1?'s':''}<div class="dt">${dstr}</div></div>
+        <button class="del" onclick="delSession(${s.id})">Delete</button>
+      </div>
+      <div class="hdetail open">${detail}${recap}</div>
+    </div>`;
+  }).join('');
+}
+
+async function resetAll(){
+  if(!confirm('Delete all logged sessions? This cannot be undone.')) return;
+  sessions = [];
+  activeDraft = null;
+  try{ await window.storage.delete(KEY); }catch(e){}
+  await persist();
+  workList = [];
+  renderProgress();
+  setDay('N');
+  toast('All data cleared');
+}
+
+async function delSession(id){
+  if(activeDraft && activeDraft.id===id) activeDraft = null;
+  sessions = sessions.filter(s=> s.id!==id);
+  await persist();
+  renderProgress();
+  if(currentDay==='N') buildAutoPlan();
+  renderTrain();
+}
+
+// ── Backup: export / import ─────────────────────────────────────────────────
+function exportPayload(){
+  return JSON.stringify({ app:'IronLog', version:1, exported:new Date().toISOString(),
+    sessions, names:NAMES_REG }, null, 0);
+}
+function closeData(){ document.getElementById('datamodal').classList.remove('show'); }
+
+function openExport(){
+  const json = exportPayload();
+  const n = sessions.filter(s=>s.kind!=='activity').length, a = sessions.length-n;
+  document.getElementById('datamodal-card').innerHTML = `
+    <div class="dm-h">Export backup</div>
+    <div class="dm-sub">${n} workout${n!==1?'s':''}${a?` + ${a} activit${a>1?'ies':'y'}`:''}. Copy this text somewhere safe (a note to yourself), or download it. To restore later, paste it into Import.</div>
+    <textarea class="dm-ta" id="dm-out" readonly>${json.replace(/</g,'&lt;')}</textarea>
+    <div class="dm-row">
+      <button class="btn btn-ghost" onclick="copyExport()">Copy</button>
+      <button class="btn btn-ghost" onclick="downloadExport()">Download</button>
+      <button class="btn btn-primary" onclick="closeData()">Done</button>
+    </div>`;
+  document.getElementById('datamodal').classList.add('show');
+}
+function copyExport(){
+  const ta = document.getElementById('dm-out');
+  const txt = exportPayload();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=>toast('Backup copied')).catch(()=>{ ta.select(); try{document.execCommand('copy'); toast('Backup copied');}catch(e){toast('Select the text and copy');} });
+  } else {
+    ta.select(); ta.setSelectionRange(0, txt.length);
+    try{ document.execCommand('copy'); toast('Backup copied'); }catch(e){ toast('Select the text and copy'); }
+  }
+}
+function downloadExport(){
+  try{
+    const blob = new Blob([exportPayload()], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `ironlog-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    toast('Backup downloaded');
+  }catch(e){ toast('Use Copy instead'); }
+}
+
+function openImport(){
+  document.getElementById('datamodal-card').innerHTML = `
+    <div class="dm-h">Import backup</div>
+    <div class="dm-sub">Paste a previously exported backup below (or choose a file), then Import. It merges with anything already here — duplicates are skipped, so it's safe.</div>
+    <textarea class="dm-ta" id="dm-in" placeholder='Paste your backup text here…'></textarea>
+    <input class="dm-file" type="file" accept="application/json,.json" id="dm-file" onchange="importFile(this)">
+    <div class="dm-row">
+      <button class="btn btn-ghost" onclick="closeData()">Cancel</button>
+      <button class="btn btn-primary" onclick="doImport()">Import</button>
+    </div>`;
+  document.getElementById('datamodal').classList.add('show');
+}
+function importFile(input){
+  const f = input.files && input.files[0];
+  if(!f) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{ document.getElementById('dm-in').value = rd.result; };
+  rd.readAsText(f);
+}
+async function doImport(){
+  const raw = (document.getElementById('dm-in').value||'').trim();
+  if(!raw){ toast('Paste a backup first'); return; }
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ toast('That doesn’t look like valid backup text'); return; }
+  const incoming = Array.isArray(data) ? data : (data.sessions||[]);
+  if(!Array.isArray(incoming) || !incoming.length){ toast('No sessions found in that backup'); return; }
+  const have = new Set(sessions.map(s=>s.id));
+  let added = 0;
+  incoming.forEach(s=>{ if(s && s.id!=null && !have.has(s.id)){ sessions.push(s); have.add(s.id); added++; } });
+  if(data && data.names) NAMES_REG = Object.assign({}, data.names, NAMES_REG);
+  activeDraft = sessions.find(s=> s.draft) || null;
+  await persist();
+  closeData();
+  renderProgress();
+  setDay('N');
+  toast(`Imported — ${added} new session${added!==1?'s':''} added`);
+}
+
+let toastT;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>el.classList.remove('show'),1800);
+}
+
+// init
+(async function(){
+  document.getElementById('sessdate').value = new Date().toISOString().slice(0,10);
+  await loadSessions();
+  // Seed the 13 Jun sessions only when storage is empty (a fresh/lost-data load),
+  // so they're never silently lost on an update — but won't fight your real data.
+  const hadData = sessions.length > 0;
+  if(!hadData){
+    SEEDS.forEach(s=>{ if(!sessions.some(x=> x.id===s.id)) sessions.push(s); });
+    try{ await persist(); }catch(e){}
+  }
+  // resume an in-progress (draft) session if one exists
+  const draft = sessions.find(s=> s.draft);
+  if(draft){
+    activeDraft = draft;
+    currentDay = draft.mode || 'C';
+    currentPlanTitle = draft.day || '';
+    ['N','C','X'].forEach(x=> document.getElementById('day-'+x).classList.toggle('on', currentDay===x));
+    document.getElementById('planbanner').classList.add('hidden');
+    document.getElementById('sessdate').value = draft.date;
+    const ids = (draft.plan && draft.plan.length) ? draft.plan : Object.keys(draft.entries);
+    workList = ids.map(id=> EXDEF[id] || {id, name:getName(id), sets:3});
+    renderTrain();
+    toast('Resumed your in-progress session');
+  } else {
+    setDay('N');
+  }
+})();
+</script>
+</body>
+</html>

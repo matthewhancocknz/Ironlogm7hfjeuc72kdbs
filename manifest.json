@@ -1,0 +1,14 @@
+{
+  "name": "Iron.Log",
+  "short_name": "Iron.Log",
+  "description": "Strength training tracker",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0F18",
+  "theme_color": "#0B0F18",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
