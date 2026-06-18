@@ -1056,6 +1056,35 @@ function gapDays(lastDate){
   return d > 0 ? d : 1;
 }
 
+// how much each activity taxes the legs / posterior chain (0 none → 2 heavy)
+const ACT_LEG = {
+  'Run':2,'Hike':2,'Football':2,'Squash':2,'Cycle':1,'Walk':1,'Tennis':1,
+  'Rowing':1,'Climbing':1,'Other':1,'Swim':0,'Yoga / mobility':0
+};
+// look at activities logged since the last lift and up to the planned date, and
+// decide whether the legs are likely still fatigued going into this session
+function activityFatigue(lastLiftDate){
+  const planned = document.getElementById('sessdate').value;
+  if(!planned) return null;
+  const pms = new Date(planned+'T00:00:00').getTime();
+  const intMult = i => i==='Hard' ? 1.5 : i==='Easy' ? 0.6 : 1;   // Moderate / blank = 1
+  let best = null;
+  sessions.filter(s=> s.kind==='activity').forEach(s=>{
+    const ams = new Date(s.date+'T00:00:00').getTime();
+    const gap = Math.round((pms - ams)/86400000);
+    if(gap < 0 || gap > 3) return;                                 // only the few days before
+    if(lastLiftDate && s.date < lastLiftDate) return;              // only since the last lift
+    const base = ACT_LEG[s.activity] != null ? ACT_LEG[s.activity] : 1;
+    let score = base * intMult(s.intensity);
+    if((s.durationMin||0) >= 90 || (s.distanceKm||0) >= 12) score += 0.5;  // long efforts add up
+    if(gap >= 2) score *= 0.5;                                     // older = mostly recovered
+    if(!best || score > best.score) best = {score, gap, s};
+  });
+  if(!best) return null;
+  return { ease: best.score >= 2 && best.gap <= 1, score: best.score, gap: best.gap,
+           activity: best.s.activity, intensity: best.s.intensity, date: best.s.date };
+}
+
 // THE ENGINE — builds a full session. type 'auto' rotates off the last workout;
 // other types ('quad','hinge','push','pull','arms','upper','lower') let you
 // override the emphasis. All stay balanced, vary the lifts, and ease axial work
@@ -1072,8 +1101,10 @@ function buildPlan(type){
   const did = new Set(last ? Object.keys(last.entries) : []);
   const didCat = c => [...did].some(id=> PATTERN[id]===c);
   const backToBack = last ? gapDays(last.date) <= 1 : false;
+  const af = activityFatigue(last ? last.date : null);
+  const easeLower = backToBack || (af && af.ease);
   const avoid = new Set(did);
-  const avoidLower = backToBack ? new Set([...did, ...HIGH_FATIGUE]) : avoid;
+  const avoidLower = easeLower ? new Set([...did, ...HIGH_FATIGUE]) : avoid;
 
   function pick(cats, roles, skip, salt){
     let cand = [];
@@ -1093,7 +1124,16 @@ function buildPlan(type){
   const ids = [];
   const add = id => { if(id && !ids.includes(id)) ids.push(id); };
   const used = () => new Set([...avoid, ...ids]);
-  const b2bNote = backToBack ? ' Heavy axial work is eased since you trained yesterday.' : '';
+  const when = g => g<=0 ? 'today' : g===1 ? 'yesterday' : `${g} days ago`;
+  let recoveryNote = '';
+  if(backToBack){
+    recoveryNote = ' Heavy axial work is eased since you trained yesterday.';
+  } else if(af && af.ease){
+    recoveryNote = ` You logged a ${af.intensity?af.intensity.toLowerCase()+' ':''}${af.activity.toLowerCase()} ${when(af.gap)}, so heavy leg work is eased today.`;
+  } else if(af && af.gap<=1 && af.score>=1){
+    recoveryNote = ` (Factored in your ${af.activity.toLowerCase()} ${when(af.gap)} — light enough to train as normal.)`;
+  }
+  const b2bNote = recoveryNote;
   let title, why;
 
   if(type==='upper'){
