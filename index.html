@@ -1217,12 +1217,9 @@ function renderPlanBanner(plan){
 }
 
 function buildAutoPlan(){
-  const last = lastLiftSession();
-  // default the date to the morning after your last lifting session
-  if(last){
-    const d = new Date(last.date+'T00:00:00'); d.setDate(d.getDate()+1);
-    document.getElementById('sessdate').value = d.toISOString().slice(0,10);
-  }
+  // default to today — so "train now" is the assumption, and recent activities /
+  // back-to-back recovery are measured against today (push the date out to plan ahead)
+  document.getElementById('sessdate').value = new Date().toISOString().slice(0,10);
   const plan = planFromLast();
   currentPlanTitle = plan.title;
   workList = plan.ids.map(id=> EXDEF[id]).filter(Boolean);
