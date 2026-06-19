@@ -1047,6 +1047,13 @@ function lastLiftSession(){
     .sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id)[0] || null;
 }
 
+// today's date in the phone's LOCAL timezone as YYYY-MM-DD
+// (never toISOString — that's UTC and reads as "yesterday" in NZ)
+function todayStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 // days between the planned (date field) session and the last logged one
 function gapDays(lastDate){
   const planned = document.getElementById('sessdate').value;
@@ -1116,10 +1123,14 @@ function buildPlan(type){
     return cand[start];
   }
 
-  const lowerLead = didCat('knee') ? 'hinge' : (didCat('hinge') ? 'knee' : (n%2 ? 'hinge' : 'knee'));
-  const pushLead  = didCat('hpush') ? 'vpush' : (didCat('vpush') ? 'hpush' : (n%2 ? 'vpush' : 'hpush'));
+  // Lead pattern ALTERNATES each session by count — full-body sessions always
+  // contain both knee and hinge lifts, so we can't infer the lead from "what you
+  // did"; parity guarantees it rotates instead of locking onto one pattern.
+  const par = n % 2;
+  const lowerLead = par ? 'hinge' : 'knee';
+  const pushLead  = par ? 'vpush' : 'hpush';
   const otherPush = pushLead==='hpush' ? 'vpush' : 'hpush';
-  const pullLead  = didCat('vpull') ? 'hpull' : (didCat('hpull') ? 'vpull' : (n%2 ? 'hpull' : 'vpull'));
+  const pullLead  = par ? 'hpull' : 'vpull';
 
   const ids = [];
   const add = id => { if(id && !ids.includes(id)) ids.push(id); };
@@ -1195,7 +1206,7 @@ function buildPlan(type){
     title = `Full body · ${lead==='knee'?'quad':'hinge'} lead`;
     why = (type==='auto')
       ? (last
-          ? `Last session trained ${didCat('knee')?'quads':didCat('hinge')?'the posterior chain':'upper body'}, so this one leads with ${lead==='knee'?'a squat':'a hinge'} and rotates fresh variations across pressing, pulling and arms.${b2bNote}`
+          ? `Alternating off your recent training, this one leads with ${lead==='knee'?'a squat':'a hinge'} and rotates fresh variations across pressing, pulling and arms so nothing repeats.${b2bNote}`
           : 'No history yet — a balanced full-body session across every major pattern. Log it and the next one programs off what you trained.')
       : `${lead==='knee'?'Quad':'Hinge'}-led full body — balanced pressing, pulling and arms.${b2bNote}`;
   }
@@ -1219,7 +1230,7 @@ function renderPlanBanner(plan){
 function buildAutoPlan(){
   // default to today — so "train now" is the assumption, and recent activities /
   // back-to-back recovery are measured against today (push the date out to plan ahead)
-  document.getElementById('sessdate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('sessdate').value = todayStr();
   const plan = planFromLast();
   currentPlanTitle = plan.title;
   workList = plan.ids.map(id=> EXDEF[id]).filter(Boolean);
@@ -1265,7 +1276,7 @@ function setDay(d){
   currentDay = d;
   ['N','C','X'].forEach(x=> document.getElementById('day-'+x).classList.toggle('on', d===x));
   if(d==='N'){ currentPlanType = 'auto'; buildAutoPlan(); }
-  else { workList = (d==='C') ? [] : workList; document.getElementById('planbanner').classList.add('hidden'); document.getElementById('typepick').classList.remove('show'); document.getElementById('sessdate').value = new Date().toISOString().slice(0,10); }
+  else { workList = (d==='C') ? [] : workList; document.getElementById('planbanner').classList.add('hidden'); document.getElementById('typepick').classList.remove('show'); document.getElementById('sessdate').value = todayStr(); }
   renderTrain();
 }
 
@@ -1344,7 +1355,7 @@ function readCardSets(ex){
 
 function ensureDraft(){
   if(activeDraft) return activeDraft;
-  const date = document.getElementById('sessdate').value || new Date().toISOString().slice(0,10);
+  const date = document.getElementById('sessdate').value || todayStr();
   const label = currentDay==='N' ? (currentPlanTitle || 'Session') : 'Custom';
   activeDraft = { id:Date.now(), date, day:label, mode:currentDay,
                   plan: workList.map(e=>e.id), entries:{}, draft:true };
@@ -1475,7 +1486,7 @@ function showRecap(fb, sess){
 function closeRecap(){ document.getElementById('recap').classList.remove('show'); }
 
 async function saveSession(){
-  const date = document.getElementById('sessdate').value || new Date().toISOString().slice(0,10);
+  const date = document.getElementById('sessdate').value || todayStr();
 
   if(currentDay === 'X'){                                   // activity log
     let activity = document.getElementById('act-type').value;
@@ -1702,7 +1713,7 @@ function downloadExport(){
     const blob = new Blob([exportPayload()], {type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `ironlog-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.href = url; a.download = `ironlog-backup-${todayStr()}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url), 1000);
     toast('Backup downloaded');
@@ -1757,7 +1768,7 @@ function toast(msg){
 
 // init
 (async function(){
-  document.getElementById('sessdate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('sessdate').value = todayStr();
   await loadSessions();
   // Seed the 13 Jun sessions only when storage is empty (a fresh/lost-data load),
   // so they're never silently lost on an update — but won't fight your real data.
