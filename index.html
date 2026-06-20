@@ -473,7 +473,7 @@
         <button class="databtn" onclick="openImport()">⤒ Import backup</button>
       </div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-06-18 · v3</div>
+      <div class="buildtag">Iron.Log · build 2026-06-18 · v4</div>
     </div>
   </section>
 </div>
@@ -509,6 +509,13 @@ if(!window.storage){
     delete: async (k)   => { try{ localStorage.removeItem(k); }catch(e){} return {deleted:true}; },
   };
 }
+// Service worker: always fetch the latest version when online (so app updates show
+// up without cache-busting), fall back to cache when offline. Harmless in Claude.
+try{
+  if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+}catch(e){}
 // ── Full gym exercise library ──────────────────────────────────────────────
 // cat: knee|hinge|calf|hpush|vpush|hpull|vpull|biceps|triceps|core
 // role: compound|accessory|iso   ·   bw: bodyweight (weight field = added kg)
@@ -1125,14 +1132,22 @@ function buildPlan(type){
     return cand[start];
   }
 
-  // Lead pattern ALTERNATES each session by count — full-body sessions always
-  // contain both knee and hinge lifts, so we can't infer the lead from "what you
-  // did"; parity guarantees it rotates instead of locking onto one pattern.
-  const par = n % 2;
-  const lowerLead = par ? 'hinge' : 'knee';
-  const pushLead  = par ? 'vpush' : 'hpush';
+  // Read what your LAST session actually led with (first lift of each pattern) and
+  // lead the new one with the opposite — genuinely alternates, regardless of the
+  // fact that full-body days contain every pattern. Parity is just the fallback.
+  function firstOf(cats){
+    const order = (last && last.plan && last.plan.length) ? last.plan
+                : (last ? Object.keys(last.entries) : []);
+    for(const id of order){ if(cats.includes(PATTERN[id])) return PATTERN[id]; }
+    return null;
+  }
+  const lastLower = firstOf(['hinge','knee']);
+  const lowerLead = lastLower==='hinge' ? 'knee' : lastLower==='knee' ? 'hinge' : (n%2?'hinge':'knee');
+  const lastPush  = firstOf(['hpush','vpush']);
+  const pushLead  = lastPush==='hpush' ? 'vpush' : lastPush==='vpush' ? 'hpush' : (n%2?'vpush':'hpush');
   const otherPush = pushLead==='hpush' ? 'vpush' : 'hpush';
-  const pullLead  = par ? 'hpull' : 'vpull';
+  const lastPull  = firstOf(['hpull','vpull']);
+  const pullLead  = lastPull==='hpull' ? 'vpull' : lastPull==='vpull' ? 'hpull' : (n%2?'hpull':'vpull');
 
   const ids = [];
   const add = id => { if(id && !ids.includes(id)) ids.push(id); };
