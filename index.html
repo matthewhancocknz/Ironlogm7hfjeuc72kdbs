@@ -473,7 +473,7 @@
         <button class="databtn" onclick="openImport()">⤒ Import backup</button>
       </div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-06-18 · v4</div>
+      <div class="buildtag">Iron.Log · build 2026-08-23 · v5</div>
     </div>
   </section>
 </div>
@@ -708,12 +708,16 @@ const SCHEME = {
 };
 function roleOf(ex){ return (ex && ex.role) || 'accessory'; }
 function gcfg(ex){ return SCHEME[roleOf(ex)] || SCHEME.accessory; }
-function effSets(ex){ return gcfg(ex).sets; }
+// Sets are trimmed by one while you're easing back in after time off.
+function effSets(ex){
+  const n = gcfg(ex).sets;
+  return returnMode ? Math.max(2, n-1) : n;
+}
 function effLo(ex){ return gcfg(ex).lo; }
 function effHi(ex){ return gcfg(ex).hi; }
 function effInc(ex){ return ex.inc || 2.5; }
 function fmtRest(s){ return s>=60 ? (s%60===0 ? (s/60)+' min' : Math.floor(s/60)+':'+String(s%60).padStart(2,'0')) : s+' sec'; }
-function repsLabel(ex){ const c=gcfg(ex); return `${c.sets} × ${c.lo}${c.hi!==c.lo?'–'+c.hi:''} · rest ${fmtRest(c.rest)}`; }
+function repsLabel(ex){ const c=gcfg(ex); return `${effSets(ex)} × ${c.lo}${c.hi!==c.lo?'–'+c.hi:''} · rest ${fmtRest(c.rest)}`; }
 
 let NAMES_REG = {};                 // custom lift id -> display name
 function getName(id){ return NAMES[id] || NAMES_REG[id] || id; }
@@ -775,17 +779,80 @@ function recentTops(exId, bw, k){
 }
 function epley(w, r){ return w * (1 + Math.min(r,15)/30); }   // estimated 1-rep max
 
-// learned recommendation: projects a target from your recent trend, not just last time
+// ── Layoff / return-to-training ─────────────────────────────────────────────
+// Set whenever the last lifting session is 14+ days behind the planned date.
+// Carries the gap and a per-group retention score earned from activities logged
+// in between, so a runner's legs are treated differently to their bench.
+let returnMode = null;
+
+function daysSince(dateStr){
+  if(!dateStr) return null;
+  const planned = (document.getElementById('sessdate') || {}).value || todayStr();
+  const d = Math.round((new Date(planned+'T00:00:00') - new Date(dateStr+'T00:00:00'))/86400000);
+  return d < 0 ? 0 : d;
+}
+function lastDateFor(exId){
+  const prior = sessions
+    .filter(s=> s.entries && s.entries[exId] && s.entries[exId].length)
+    .sort((a,b)=> b.date.localeCompare(a.date));
+  return prior.length ? prior[0].date : null;
+}
+function bestEver(exId){
+  let b = 0;
+  sessions.forEach(s=> ((s.entries && s.entries[exId]) || []).forEach(st=>{ if(st.w>b) b=st.w; }));
+  return b;
+}
+// Strength doesn't fall off a cliff — little for a fortnight, then a gentle
+// slide. Returns the share of your old top set worth opening with. Deliberately
+// conservative: the first session back should feel easy.
+function layoffFactorRaw(days){
+  if(days == null || days < 12) return 1;
+  if(days < 21) return 0.95;
+  if(days < 35) return 0.90;
+  if(days < 56) return 0.85;
+  if(days < 84) return 0.80;
+  return 0.72;
+}
+// Activity in the gap claws back part of the drop — but only for what it trained.
+function layoffFactor(days, group){
+  const base = layoffFactorRaw(days);
+  if(base === 1) return 1;
+  const r = (returnMode && returnMode.ret) ? (returnMode.ret[group] || 0) : 0;
+  return base + (1 - base) * r;
+}
+function offLabel(days){
+  if(days >= 56) return `${Math.round(days/30)} months off`;
+  if(days >= 21) return `${Math.round(days/7)} weeks off`;
+  return `${days} days off`;
+}
+function computeReturnMode(){
+  const last = lastLiftSession();
+  const d = last ? daysSince(last.date) : null;
+  if(d == null || d < 14){ returnMode = null; return null; }
+  returnMode = {days:d, label:offLabel(d), ret:{lower:0,push:0,pull:0,core:0,count:0,types:[]}};
+  returnMode.ret = retentionOverGap(last.date);
+  return returnMode;
+}
+
+// learned recommendation: projects a target from your recent trend, backs off
+// after a layoff, and climbs in bigger steps over ground you've already held
 function suggestNext(ex){
   const sets = lastSets(ex.id);
   if(!sets) return null;
   const lo = effLo(ex), hi = effHi(ex), inc = effInc(ex);
   const round = w => Math.round(w/inc)*inc;
+  const gap = daysSince(lastDateFor(ex.id));
+  const rusty = gap != null && gap >= 12;
+  const grp = GROUP_OF[ex.cat] || 'push';
 
   if(ex.bw){                                    // bodyweight: progress reps, then added load
     const tops = recentTops(ex.id, true);
     const maxR = Math.max(...sets.map(s=>s.r));
     const addLoad = Math.max(...sets.map(s=>s.w));
+    if(rusty){
+      const target = Math.max(1, Math.round(maxR * layoffFactor(gap, grp)));
+      return {bw:true, dir:'hold', tag:`${offLabel(gap)} — aim ~${target} reps, leave a couple in the tank`};
+    }
     const climbing = tops.length>=2 && tops[tops.length-1].r > tops[0].r;
     if(maxR >= hi) return {bw:true, dir:'up', tag: addLoad>0 ? `add load past +${fmt(addLoad)} kg` : `add load — past ${hi} reps`};
     return {bw:true, dir:'hold', tag: climbing ? `trending up — beat ${maxR} reps` : `beat ${maxR} reps`};
@@ -794,10 +861,24 @@ function suggestNext(ex){
   const topW = Math.max(...sets.map(s=>s.w));
   const repsAtTop = Math.min(...sets.filter(s=>s.w===topW).map(s=>s.r));
   const fixed = lo===hi, cleared = repsAtTop>=hi, inRange = repsAtTop>=lo;
+  const be = bestEver(ex.id);
+
+  // Coming back after time off: back the weight off rather than projecting a
+  // trend that stopped weeks ago. You re-earn it in two or three sessions.
+  if(rusty){
+    const f = layoffFactor(gap, grp);
+    const w = Math.max(inc, round(topW * f));
+    const kept = returnMode && (returnMode.ret[grp] || 0) >= 0.25;
+    return {weight: w, dir:'hold',
+            tag: kept
+              ? `${offLabel(gap)} off the bar, but you've kept moving — start ${fmt(w)} kg`
+              : `${offLabel(gap)} — ease in here, then climb back to ${fmt(topW)} kg`};
+  }
 
   // trend projection via estimated 1RM over recent sessions
   const tops = recentTops(ex.id, false);
   const e = tops.map(t=> epley(t.w, t.r));
+  const rebuilding = be > topW + inc;          // you've handled more than this before
   if(e.length >= 2){
     const n=e.length; let sx=0,sy=0,sxx=0,sxy=0;
     for(let i=0;i<n;i++){ sx+=i; sy+=e[i]; sxx+=i*i; sxy+=i*e[i]; }
@@ -805,16 +886,19 @@ function suggestNext(ex){
     const projE = e[n-1] + Math.max(0, slope);                 // only project upward
     const midReps = Math.round((lo+hi)/2);
     let projW = round(projE / (1 + midReps/30));
-    projW = Math.max(topW, Math.min(projW, topW + 2*inc));     // clamp to a sane step
+    const cap = rebuilding ? 3*inc : 2*inc;                    // bigger steps over old ground
+    projW = Math.max(topW, Math.min(projW, topW + cap, rebuilding ? be : Infinity));
     const rising = n>=3 && tops[n-1].w>=tops[n-2].w && tops[n-2].w>=tops[n-3].w;
     if(!inRange) return {weight: topW, dir:'repeat', tag:`build to ${lo}–${hi} at ${fmt(topW)} kg`};
-    if(projW > topW) return {weight: projW, dir:'up', tag: rising ? 'on a roll — projected target' : 'projected from your trend'};
+    if(cleared && rebuilding) return {weight: Math.min(topW + 2*inc, be), dir:'up', tag:`climbing back — your best is ${fmt(be)} kg`};
+    if(projW > topW) return {weight: projW, dir:'up', tag: rebuilding ? `working back toward ${fmt(be)} kg` : (rising ? 'on a roll — projected target' : 'projected from your trend')};
     if(cleared) return {weight: topW+inc, dir:'up', tag:`cleared ${hi}${fixed?'':'+'} — step up`};
     return {weight: topW, dir:'hold', tag: fixed ? `lock in ${hi} reps` : `chase ${hi} reps`};
   }
 
   // single data point — simple rule
-  if(cleared) return {weight: topW + inc, dir:'up', tag:`cleared ${hi}${fixed?'':'+'} reps`};
+  if(cleared) return {weight: rebuilding ? Math.min(topW+2*inc, be) : topW+inc, dir:'up',
+                      tag: rebuilding ? `climbing back — best ${fmt(be)} kg` : `cleared ${hi}${fixed?'':'+'} reps`};
   if(inRange) return {weight: topW, dir:'hold', tag: fixed ? `lock in ${hi} reps` : `chase ${hi} reps`};
   return {weight: topW, dir:'repeat', tag:`build to ${lo}–${hi}`};
 }
@@ -834,6 +918,7 @@ function setRowHTML(exId, i, phW, val){
 }
 
 function renderTrain(){
+  computeReturnMode();
   const list = document.getElementById('exlist');
   list.innerHTML = '';
   if(currentDay==='X'){ list.innerHTML = activityFormHTML(); onActType(); return; }
@@ -1077,6 +1162,53 @@ const ACT_LEG = {
   'Run':2,'Hike':2,'Football':2,'Squash':2,'Cycle':1,'Walk':1,'Tennis':1,
   'Rowing':1,'Climbing':1,'Other':1,'Swim':0,'Yoga / mobility':0
 };
+
+// What a non-lifting activity preserves while you're away from the bar, by
+// muscle group. Ceilings are deliberately modest: running maintains conditioning
+// and tissue tolerance, NOT maximal strength. Nothing here holds your bench.
+const ACT_MAINT = {
+  'Run':            {lower:.45, push:.00, pull:.00, core:.15},
+  'Football':       {lower:.45, push:.00, pull:.00, core:.15},
+  'Hike':           {lower:.40, push:.00, pull:.00, core:.10},
+  'Cycle':          {lower:.35, push:.00, pull:.00, core:.05},
+  'Squash':         {lower:.35, push:.05, pull:.05, core:.15},
+  'Tennis':         {lower:.30, push:.05, pull:.05, core:.15},
+  'Rowing':         {lower:.30, push:.10, pull:.35, core:.25},
+  'Climbing':       {lower:.25, push:.10, pull:.50, core:.35},
+  'Swim':           {lower:.15, push:.20, pull:.30, core:.20},
+  'Walk':           {lower:.20, push:.00, pull:.00, core:.00},
+  'Yoga / mobility':{lower:.15, push:.05, pull:.05, core:.30},
+  'Other':          {lower:.20, push:.05, pull:.05, core:.10},
+};
+const GROUP_OF = {knee:'lower',hinge:'lower',calf:'lower',
+                  hpush:'push',vpush:'push',triceps:'push',
+                  hpull:'pull',vpull:'pull',biceps:'pull', core:'core'};
+
+// Frequency-weighted retention across the lifting gap. One run in six weeks is
+// noise; twice a week earns the full ceiling for that activity.
+function retentionOverGap(sinceDate){
+  const until = (document.getElementById('sessdate') || {}).value || todayStr();
+  const acts = sessions.filter(s=> s.kind==='activity' && s.date > (sinceDate||'') && s.date <= until);
+  const days = Math.max(7, Math.round((new Date(until+'T00:00:00') - new Date((sinceDate||until)+'T00:00:00'))/86400000));
+  const weeks = days/7;
+  const out = {lower:0, push:0, pull:0, core:0};
+  const byType = {};
+  acts.forEach(s=>{ (byType[s.activity] = byType[s.activity] || []).push(s); });
+  Object.keys(byType).forEach(type=>{
+    const m = ACT_MAINT[type] || ACT_MAINT['Other'];
+    const list = byType[type];
+    const perWeek = list.length / weeks;
+    let scale = Math.min(1, perWeek/2);                        // 2×/week = full credit
+    const avgMin = list.reduce((a,s)=> a+(s.durationMin||0),0)/list.length;
+    if(avgMin >= 60) scale = Math.min(1, scale*1.15);          // longer efforts count more
+    if(avgMin && avgMin < 25) scale *= 0.7;
+    Object.keys(out).forEach(g=>{ out[g] = Math.max(out[g], (m[g]||0)*scale); });
+  });
+  out.count = acts.length;
+  out.types = Object.keys(byType);
+  return out;
+}
+
 // look at activities logged since the last lift and up to the planned date, and
 // decide whether the legs are likely still fatigued going into this session
 function activityFatigue(lastLiftDate){
@@ -1119,8 +1251,13 @@ function buildPlan(type){
   const backToBack = last ? gapDays(last.date) <= 1 : false;
   const af = activityFatigue(last ? last.date : null);
   const easeLower = backToBack || (af && af.ease);
-  const avoid = new Set(did);
-  const avoidLower = easeLower ? new Set([...did, ...HIGH_FATIGUE]) : avoid;
+  const rm = computeReturnMode();
+  // After time off, rotating onto *fresh* lifts is the wrong move — you want the
+  // movements you have numbers for, so the app can steer you back onto them.
+  const avoid = rm ? new Set() : new Set(did);
+  // Acute fatigue still applies: a hard run two days ago pulls the heavy axial
+  // work even when you're returning from a layoff.
+  const avoidLower = easeLower ? new Set([...(rm ? [] : did), ...HIGH_FATIGUE]) : avoid;
 
   function pick(cats, roles, skip, salt){
     let cand = [];
@@ -1154,7 +1291,18 @@ function buildPlan(type){
   const used = () => new Set([...avoid, ...ids]);
   const when = g => g<=0 ? 'today' : g===1 ? 'yesterday' : `${g} days ago`;
   let recoveryNote = '';
-  if(backToBack){
+  if(rm){
+    const loPct = Math.round((1-layoffFactor(rm.days,'lower'))*100);
+    const upPct = Math.round((1-layoffFactor(rm.days,'push'))*100);
+    const acts = rm.ret.types.length ? rm.ret.types.join(' and ').toLowerCase() : '';
+    recoveryNote = ` You've had ${rm.label} away from the bar` +
+      (rm.ret.count ? `, though you logged ${rm.ret.count} ${acts} session${rm.ret.count>1?'s':''} in that time.` : '.') +
+      (loPct !== upPct
+        ? ` Weights are backed off ~${upPct}% up top and ~${loPct}% on the legs — the ${acts||'cardio'} held your conditioning, not your pressing.`
+        : ` Weights are backed off about ${loPct}%.`) +
+      ` Two reps in reserve on everything.` +
+      (rm.ret.lower >= .3 ? ` Fair warning: running keeps the engine going but doesn't prepare the legs for loaded squats — expect to be sore.` : '');
+  } else if(backToBack){
     recoveryNote = ' Heavy axial work is eased since you trained yesterday.';
   } else if(af && af.ease){
     recoveryNote = ` You logged a ${af.intensity?af.intensity.toLowerCase()+' ':''}${af.activity.toLowerCase()} ${when(af.gap)}, so heavy leg work is eased today.`;
@@ -1227,7 +1375,16 @@ function buildPlan(type){
           : 'No history yet — a balanced full-body session across every major pattern. Log it and the next one programs off what you trained.')
       : `${lead==='knee'?'Quad':'Hinge'}-led full body — balanced pressing, pulling and arms.${b2bNote}`;
   }
-  return { type, title, why, ids: ids.filter(Boolean) };
+  // Easing back in: shorter session, familiar movements, and say so on the tin.
+  if(rm){
+    title += ' · easing back';
+    if(type==='auto' && last){
+      why = `First session back after ${rm.label}. This one sticks to movements you already have numbers for, so the weights can steer you back onto them.${b2bNote}`;
+    }
+  }
+  let out = ids.filter(Boolean);
+  if(rm) out = out.slice(0, rm.days >= 35 ? 5 : 6);
+  return { type, title, why, ids: out };
 }
 
 function planFromLast(){ return buildPlan(currentPlanType); }
@@ -1239,9 +1396,11 @@ function renderPlanBanner(plan){
   const planned = document.getElementById('sessdate').value;
   const d = new Date(planned+'T00:00:00');
   const when = isNaN(d) ? 'Next session' : d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
+  const cs = returnMode ? Math.max(2, SCHEME.compound.sets-1) : SCHEME.compound.sets;
+  const isets = returnMode ? Math.max(2, SCHEME.iso.sets-1) : SCHEME.iso.sets;
   el.innerHTML = `<div class="pb-title">${when} · ${plan.title}</div>
     <div class="pb-why">${plan.why}</div>
-    <div class="pb-why" style="margin-top:6px"><b>Targets:</b> compounds ${SCHEME.compound.sets}×${SCHEME.compound.lo}–${SCHEME.compound.hi}, isolation ${SCHEME.iso.sets}×${SCHEME.iso.lo}–${SCHEME.iso.hi}, ~1–2 min rest.</div>`;
+    <div class="pb-why" style="margin-top:6px"><b>Targets:</b> compounds ${cs}×${SCHEME.compound.lo}–${SCHEME.compound.hi}, isolation ${isets}×${SCHEME.iso.lo}–${SCHEME.iso.hi}, ~1–2 min rest.</div>`;
 }
 
 function buildAutoPlan(){
@@ -1424,15 +1583,20 @@ function buildFeedback(sess){
     let dir='new', text='first time logged — baseline';
     if(prevSess){
       const prev = topOf(prevSess.entries[id], ex.bw);
+      // A planned back-off after weeks away isn't a regression — don't score it as one.
+      const backFrom = Math.round((new Date(sess.date+'T00:00:00') - new Date(prevSess.date+'T00:00:00'))/86400000);
+      const afterBreak = backFrom >= 12;
       if(ex.bw){
         if(cur.w>prev.w){ dir='up'; text=`▲ +${fmt(cur.w-prev.w)} kg added`; }
         else if(cur.r>prev.r){ dir='up'; text=`▲ +${cur.r-prev.r} reps (${cur.r})`; }
+        else if(afterBreak){ dir='same'; text=`back after ${offLabel(backFrom)} — baseline reset`; }
         else if(cur.r<prev.r){ dir='down'; text=`▼ ${cur.r-prev.r} reps`; }
         else { dir='same'; text=`held ${cur.r} reps`; }
         if(cur.w>bestPrev || (cur.w===bestPrev && cur.r>bestPrevR)) prs++;
       } else {
         const dw = cur.w-prev.w;
-        if(dw>0){ dir='up'; text=`▲ +${fmt(dw)} kg → ${fmt(cur.w)}`; }
+        if(afterBreak && dw<=0){ dir='same'; text=`back after ${offLabel(backFrom)} — baseline reset`; }
+        else if(dw>0){ dir='up'; text=`▲ +${fmt(dw)} kg → ${fmt(cur.w)}`; }
         else if(dw<0){ dir='down'; text=`▼ ${fmt(-dw)} kg`; }
         else {
           const dr = cur.r-prev.r;
@@ -1441,7 +1605,7 @@ function buildFeedback(sess){
           else { dir='same'; text=`held ${fmt(cur.w)} kg × ${cur.r}`; }
         }
         if(cur.w>bestPrev) prs++;
-        if(cur.w===prev.w && cur.r<=prev.r) stalls.push(ex.name);
+        if(!afterBreak && cur.w===prev.w && cur.r<=prev.r) stalls.push(ex.name);
       }
     }
     if(dir==='new') newCount++;
@@ -1478,6 +1642,17 @@ function buildFeedback(sess){
   let noLeg=0;
   for(const s of liftSorted){ const hasLeg=Object.keys(s.entries).some(id=> ['knee','hinge','calf'].includes(PATTERN[id])); if(hasLeg) break; noLeg++; }
   if(noLeg>=2) notes.push(`That's ${noLeg} sessions without legs — a lower-body day is due.`);
+
+  // Lead with the return-to-training framing so the numbers read correctly.
+  const firstPrior = prior.find(s=> s.entries && Object.keys(s.entries).length);
+  if(firstPrior){
+    const sg = Math.round((new Date(sess.date+'T00:00:00') - new Date(firstPrior.date+'T00:00:00'))/86400000);
+    if(sg >= 14){
+      const acts = sessions.filter(s=> s.kind==='activity' && s.date > firstPrior.date && s.date <= sess.date);
+      const kept = acts.length ? ` The ${[...new Set(acts.map(a=>a.activity))].join(' and ').toLowerCase()} in between kept your engine going, which is why the legs came back faster than the pressing.` : '';
+      notes.unshift(`First session back after ${offLabel(sg)}. Today is a reset point, not a regression — strength returns far faster than it was built, so expect to be near your old lifts within two or three sessions.${kept}`);
+    }
+  }
 
   return { volume: Math.round(totalVol), sets: totalSets, prs, lifts, notes: notes.slice(0,5) };
 }
