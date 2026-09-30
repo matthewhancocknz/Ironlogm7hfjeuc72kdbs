@@ -37,14 +37,14 @@
     color:var(--chalk);
     font-family:'Inter',system-ui,-apple-system,sans-serif;
     line-height:1.4;
-    padding-bottom:96px;
+    padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));
     overscroll-behavior-y:contain;
   }
   .wrap{max-width:560px;margin:0 auto;padding:0 16px}
 
   /* Header */
   header{
-    padding:26px 0 14px;
+    padding:calc(26px + env(safe-area-inset-top, 0px)) 0 14px;
     border-bottom:1px solid var(--hair);
     margin-bottom:18px;
   }
@@ -94,7 +94,7 @@
   }
 
   .resttimer{
-    position:fixed;left:16px;bottom:96px;z-index:35;
+    position:fixed;left:16px;bottom:calc(96px + env(safe-area-inset-bottom, 0px));z-index:35;
     background:var(--surface-2);border:1px solid var(--amber-line);color:var(--amber);
     border-radius:11px;padding:10px 16px;cursor:pointer;
     font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.04em;
@@ -210,6 +210,23 @@
   .savelift.done{background:var(--amber-soft);border-color:var(--amber-line);color:var(--amber)}
   .ex.saved{border-color:var(--amber-line)}
 
+  .sug.reset,.sug.swap{color:#F2B266;border-color:rgba(242,178,102,.45);background:rgba(242,178,102,.08)}
+  .effort{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
+  .effort-l{width:100%;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-dim);font-weight:600}
+  .effchip{flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--hair);color:var(--muted);
+    border-radius:9px;padding:6px 4px;cursor:pointer;font-family:'Inter';line-height:1.2;text-align:center}
+  .effchip b{display:block;font-size:12.5px;font-weight:600}
+  .effchip small{display:block;font-size:10px;color:var(--muted-dim)}
+  .effchip.on{background:var(--amber-soft);border-color:var(--amber-line);color:var(--amber)}
+  .effchip.on small{color:var(--amber);opacity:.8}
+  .pb-btn{margin-top:10px;background:none;border:1px solid var(--amber-line);color:var(--amber);border-radius:9px;
+    padding:7px 12px;font-family:'Inter';font-size:12px;font-weight:600;cursor:pointer}
+  .pb-btn.hot{background:var(--amber);color:#04231e}
+  .stepchips{display:flex;flex-wrap:wrap;gap:6px}
+  .syfld input{font-family:'Inter'!important;font-size:14px!important;font-weight:500!important}
+  .syncstat{font-size:12px;color:var(--muted-dim);margin-top:8px;line-height:1.4;text-align:center}
+  .syncstat.err{color:#F2B266}
+
   /* recap modal */
   .modal{
     position:fixed;inset:0;z-index:60;display:none;
@@ -316,8 +333,10 @@
   .set:first-of-type{border-top:none}
   .set .sn{
     font-family:'Barlow Condensed',sans-serif;font-weight:600;color:var(--muted-dim);
-    font-size:15px;text-align:center;
+    font-size:15px;text-align:center;background:none;border:none;padding:10px 0;cursor:pointer;width:100%;
   }
+  .set.wu .sn{color:var(--steel)}
+  .set.wu .inp input{opacity:.5}
   .inp{position:relative}
   .inp input{
     width:100%;background:var(--surface-2);border:1px solid var(--hair);
@@ -343,7 +362,7 @@
   .savebar{
     position:fixed;bottom:0;left:0;right:0;
     background:linear-gradient(to top,var(--bg) 62%,transparent);
-    padding:14px 16px 18px;z-index:20;
+    padding:14px 16px calc(18px + env(safe-area-inset-bottom, 0px));z-index:20;
   }
   .savebar .inner{max-width:560px;margin:0 auto;display:flex;gap:10px}
   .btn{
@@ -406,7 +425,7 @@
 
   /* toast */
   .toast{
-    position:fixed;left:50%;bottom:92px;
+    position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom, 0px));
     transform:translateX(-50%) translateY(14px);
     background:var(--amber);color:#04231e;padding:12px 22px;border-radius:12px;
     font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.05em;
@@ -472,8 +491,12 @@
         <button class="databtn" onclick="openExport()">⤓ Export backup</button>
         <button class="databtn" onclick="openImport()">⤒ Import backup</button>
       </div>
+      <div class="databtns">
+        <button class="databtn" onclick="openSync()">⟳ GitHub sync</button>
+      </div>
+      <div class="syncstat" id="syncstat"></div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-08-23 · v5</div>
+      <div class="buildtag">Iron.Log · build 2026-09-30 · v7</div>
     </div>
   </section>
 </div>
@@ -605,7 +628,7 @@ const CAT_ORDER = ['knee','hinge','calf','hpush','vpush','hpull','vpull','biceps
 const CAT_LABEL = {knee:'Legs · quads',hinge:'Legs · hamstrings & glutes',calf:'Calves',hpush:'Chest',vpush:'Shoulders',hpull:'Back · rows',vpull:'Back · pulldowns/pull-ups',biceps:'Biceps',triceps:'Triceps',core:'Core'};
 
 // high-fatigue axial lifts to avoid on back-to-back days
-const HIGH_FATIGUE = new Set(['deadlift','dead','trapdl','squat','fsquat','goodmorn']);
+const HIGH_FATIGUE = new Set(['dead','trapdl','squat','fsquat','goodmorn']);
 
 // muscle map per movement category → highlighted regions + plain-language label
 const MUSC = {
@@ -676,26 +699,7 @@ const CUES = {
   abwheel:'Brace hard, roll out only as far as you can keep a flat back.',
 };
 
-// ── Seed: the workout logged on 13 Jun (inserted once on first load) ─────────
-const SEED = { id:1718239813000, date:'2026-06-13', day:'Upper body', entries:{
-  bench:[{w:20,r:20},{w:60,r:8},{w:60,r:8},{w:60,r:6}],
-  dbrow:[{w:25,r:10},{w:30,r:10},{w:30,r:10}],
-  pull:[{w:43,r:10},{w:63,r:10},{w:59,r:10}],
-  pushdown:[{w:18,r:10},{w:18,r:10},{w:18,r:10}],
-  ohp:[{w:35,r:10}],
-  curl:[{w:20,r:10},{w:20,r:10}]
-}};
-const SEED2 = { id:1718239900000, date:'2026-06-14', day:'Full body · hinge lead', entries:{
-  rdl:[{w:40,r:10},{w:40,r:10},{w:40,r:12}],
-  dbohp:[{w:35,r:12},{w:40,r:5},{w:35,r:6}],
-  lunge:[{w:40,r:14},{w:32,r:14},{w:40,r:14}],
-  cablerow:[{w:45,r:10},{w:52,r:15},{w:52,r:10}],
-  dips:[{w:0,r:8},{w:0,r:7}],
-  facepull:[{w:23,r:12},{w:27,r:9}],
-  bbcurl:[{w:30,r:7},{w:20,r:12}],
-  cgbench:[{w:20,r:10},{w:30,r:10},{w:40,r:10}]
-}};
-const SEEDS = [SEED, SEED2];
+
 
 // activity (non-lifting) options
 const ACTIVITIES = ['Run','Walk','Cycle','Swim','Squash','Tennis','Football','Rowing','Hike','Climbing','Yoga / mobility','Other'];
@@ -713,11 +717,13 @@ function effSets(ex){
   const n = gcfg(ex).sets;
   return returnMode ? Math.max(2, n-1) : n;
 }
-function effLo(ex){ return gcfg(ex).lo; }
-function effHi(ex){ return gcfg(ex).hi; }
+// Each lift's own rep range (e.g. deadlift 4–6) wins; the scheme is the fallback
+// for custom lifts. Sets and rest still come from the scheme.
+function effLo(ex){ return (ex && ex.lo) || gcfg(ex).lo; }
+function effHi(ex){ return (ex && ex.hi) || gcfg(ex).hi; }
 function effInc(ex){ return ex.inc || 2.5; }
 function fmtRest(s){ return s>=60 ? (s%60===0 ? (s/60)+' min' : Math.floor(s/60)+':'+String(s%60).padStart(2,'0')) : s+' sec'; }
-function repsLabel(ex){ const c=gcfg(ex); return `${effSets(ex)} × ${c.lo}${c.hi!==c.lo?'–'+c.hi:''} · rest ${fmtRest(c.rest)}`; }
+function repsLabel(ex){ const c=gcfg(ex), lo=effLo(ex), hi=effHi(ex); return `${effSets(ex)} × ${lo}${hi!==lo?'–'+hi:''} · rest ${fmtRest(c.rest)}`; }
 
 let NAMES_REG = {};                 // custom lift id -> display name
 function getName(id){ return NAMES[id] || NAMES_REG[id] || id; }
@@ -726,51 +732,99 @@ let currentDay = 'N';               // 'N' = auto next session, 'C' = custom, 'X
 let workList = [];                  // lifts for the current session, in order
 let currentPlanTitle = '';          // label for an auto-generated session
 let currentPlanType = 'auto';       // session emphasis for the Next plan
+let currentPlanSlot = null;         // 'A' / 'B' for block sessions
+let pendingEffort = {};             // effort taps for the current session, by lift
+let PREFS = {inc:{}, updated:0};    // per-lift weight steps
+let BLOCK = null;                   // current training block (fixed main lifts)
+let TOMB = {};                      // deleted session ids -> deletedAt (so sync doesn't resurrect them)
+let SYNC = null;                    // GitHub sync config
 let activeDraft = null;             // in-progress session saved lift-by-lift
 let sessions = [];
 
 const KEY  = 'ironlog-sessions-v1';
 const NKEY = 'ironlog-names-v1';
+const PKEY = 'ironlog-prefs-v1';
+const BKEY = 'ironlog-block-v1';
+const TKEY = 'ironlog-deleted-v1';
+const SKEY = 'ironlog-sync-v1';
 
+// Completed sessions only. The in-progress draft lives in `sessions` so it
+// survives a reload, but it must never count as "last time" — otherwise saving
+// one lift mid-workout rewrites the plan, the suggestions and layoff mode.
+function doneSessions(){ return sessions.filter(s=> !s.draft); }
+
+async function loadJSON(k, dflt){
+  try{ const r = await window.storage.get(k); return r && r.value ? JSON.parse(r.value) : dflt; }
+  catch(e){ return dflt; }
+}
 async function loadSessions(){
-  try{
-    const r = await window.storage.get(KEY);
-    sessions = r && r.value ? JSON.parse(r.value) : [];
-  }catch(e){ sessions = []; }
-  try{
-    const n = await window.storage.get(NKEY);
-    NAMES_REG = n && n.value ? JSON.parse(n.value) : {};
-  }catch(e){ NAMES_REG = {}; }
+  sessions  = await loadJSON(KEY, []);
+  NAMES_REG = await loadJSON(NKEY, {});
+  PREFS     = await loadJSON(PKEY, {inc:{}, updated:0}); PREFS.inc = PREFS.inc || {};
+  BLOCK     = await loadJSON(BKEY, null);
+  TOMB      = await loadJSON(TKEY, {});
+  SYNC      = await loadJSON(SKEY, null);
 }
 async function persist(){
   try{
     await window.storage.set(KEY, JSON.stringify(sessions));
     await window.storage.set(NKEY, JSON.stringify(NAMES_REG));
+    await window.storage.set(PKEY, JSON.stringify(PREFS));
+    await window.storage.set(BKEY, JSON.stringify(BLOCK));
+    await window.storage.set(TKEY, JSON.stringify(TOMB));
   }catch(e){ toast('Save failed — try again'); }
 }
 
 // most recent prior session containing this exercise → its heaviest set
+// Working sets only: anything tapped as a warm-up, or under 60% of the heaviest
+// set, is ignored for progression, volume and PRs (e.g. a 20 kg × 20 bench warm-up).
+function workSets(sets){
+  if(!sets || !sets.length) return [];
+  const real = sets.filter(s=> !s.wu);
+  const top = Math.max(0, ...real.map(s=> s.w||0));
+  const ws = top > 0 ? real.filter(s=> (s.w||0) >= 0.6*top) : real;
+  return ws.length ? ws : sets;
+}
+function sessionsWith(exId){
+  return doneSessions().filter(s=> s.entries && s.entries[exId] && s.entries[exId].length);
+}
+// most recent prior session containing this exercise → its best working set
 function lastTopSet(exId, beforeDate){
-  const prior = sessions
-    .filter(s => s.entries && s.entries[exId] && s.entries[exId].length)
+  const prior = sessionsWith(exId)
     .filter(s => !beforeDate || s.date < beforeDate)
-    .sort((a,b)=> b.date.localeCompare(a.date));
+    .sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id);
   if(!prior.length) return null;
-  const sets = prior[0].entries[exId];
-  return sets.reduce((m,s)=> s.w > m.w ? s : m, sets[0]);
+  const ex = EXDEF[exId];
+  return topOf(prior[0].entries[exId], !!(ex && ex.bw));
+}
+// last session's working sets + how it felt
+function lastEntry(exId){
+  const prior = sessionsWith(exId).sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id);
+  if(!prior.length) return null;
+  const s = prior[0];
+  return {sets: workSets(s.entries[exId]), effort: (s.effort && s.effort[exId]) || null, date: s.date};
+}
+// effort ratings, most recent first
+function effortTrail(exId, k){
+  return sessionsWith(exId).sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id)
+    .slice(0, k||2).map(s=> (s.effort && s.effort[exId]) || null);
+}
+// chronological per-session summary: heaviest working weight + best estimated 1RM
+function seriesFor(exId){
+  const ex = EXDEF[exId];
+  return sessionsWith(exId).sort((a,b)=> a.date.localeCompare(b.date) || a.id-b.id).map(s=>{
+    const ws = workSets(s.entries[exId]);
+    const t = topOf(ws, !!(ex && ex.bw));
+    return {date:s.date, id:s.id, topW: Math.max(...ws.map(x=> x.w||0)), e: epley(t.w, t.r), w:t.w, r:t.r};
+  });
 }
 
 // last full set list for an exercise (most recent session)
-function lastSets(exId){
-  const prior = sessions
-    .filter(s => s.entries && s.entries[exId] && s.entries[exId].length)
-    .sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id);
-  return prior.length ? prior[0].entries[exId] : null;
-}
+function lastSets(exId){ const e = lastEntry(exId); return e ? e.sets : null; }
 
 // chronological top sets for an exercise across recent sessions
 function recentTops(exId, bw, k){
-  const ss = sessions
+  const ss = doneSessions()
     .filter(s => s.entries && s.entries[exId] && s.entries[exId].length)
     .sort((a,b)=> a.date.localeCompare(b.date) || a.id-b.id)
     .slice(-(k||5))
@@ -792,15 +846,57 @@ function daysSince(dateStr){
   return d < 0 ? 0 : d;
 }
 function lastDateFor(exId){
-  const prior = sessions
+  const prior = doneSessions()
     .filter(s=> s.entries && s.entries[exId] && s.entries[exId].length)
     .sort((a,b)=> b.date.localeCompare(a.date));
   return prior.length ? prior[0].date : null;
 }
 function bestEver(exId){
   let b = 0;
-  sessions.forEach(s=> ((s.entries && s.entries[exId]) || []).forEach(st=>{ if(st.w>b) b=st.w; }));
+  doneSessions().forEach(s=> workSets((s.entries||{})[exId]).forEach(st=>{ if(st.w>b) b=st.w; }));
   return b;
+}
+// ── Real weight steps ───────────────────────────────────────────────────────
+// Per-lift override (set in the ⓘ panel), else the library default. Suggestions
+// also snap to weights you've actually logged, so cable stacks like 43 → 59 → 63 work.
+function stepFor(ex){ return (PREFS.inc && PREFS.inc[ex.id]) || ex.inc || 2.5; }
+function num(x){ return Math.round(x*100)/100; }
+function knownWeights(exId){
+  const set = new Set();
+  doneSessions().forEach(s=> workSets((s.entries||{})[exId]).forEach(x=>{ if(x.w>0) set.add(x.w); }));
+  return [...set].sort((a,b)=> a-b);
+}
+function roundW(ex, w){
+  const st = stepFor(ex);
+  const near = knownWeights(ex.id).filter(k=> Math.abs(k-w) <= st/2)
+                                  .sort((a,b)=> Math.abs(a-w)-Math.abs(b-w))[0];
+  return num(Math.max(st, near != null ? near : Math.round(w/st)*st));
+}
+function upFrom(ex, w, steps){
+  const st = stepFor(ex);
+  if(steps === 1){
+    const nxt = knownWeights(ex.id).find(k=> k > w && k <= w + 2*st);
+    if(nxt != null) return nxt;
+  }
+  return num(w + st*steps);
+}
+// Three sessions with no gain in estimated 1RM = stalled. Layoffs and the
+// rebuild right after a reset don't count. `again` = it already had a reset.
+function stallState(ex){
+  const ser = seriesFor(ex.id).slice(-6);
+  if(ser.length < 3) return null;
+  const n = ser.length, L = ser.slice(-3);
+  const gapD = (a,b)=> Math.round((new Date(b+'T00:00:00') - new Date(a+'T00:00:00'))/86400000);
+  for(let i=1;i<3;i++){
+    if(gapD(L[i-1].date, L[i].date) >= 12) return null;
+    if(L[i].topW <= L[i-1].topW*0.93) return null;
+  }
+  if(Math.max(L[1].e, L[2].e) > L[0].e*1.01) return null;
+  let again = false;
+  for(let i=1;i<=n-3;i++){
+    if(ser[i].topW <= ser[i-1].topW*0.93 && gapD(ser[i-1].date, ser[i].date) < 12) again = true;
+  }
+  return {again};
 }
 // Strength doesn't fall off a cliff — little for a fortnight, then a gentle
 // slide. Returns the share of your old top set worth opening with. Deliberately
@@ -836,12 +932,17 @@ function computeReturnMode(){
 
 // learned recommendation: projects a target from your recent trend, backs off
 // after a layoff, and climbs in bigger steps over ground you've already held
+// Double progression, steered by how the last set felt:
+//  • hold the weight until every working set at it reaches the top of the range
+//  • then add one step — two if it felt easy twice running (capped at ~7.5%)
+//  • hit the top but it was a grind → repeat the weight
+//  • three sessions without progress → reset ~10%; stalls again → swap variation
 function suggestNext(ex){
-  const sets = lastSets(ex.id);
-  if(!sets) return null;
-  const lo = effLo(ex), hi = effHi(ex), inc = effInc(ex);
-  const round = w => Math.round(w/inc)*inc;
-  const gap = daysSince(lastDateFor(ex.id));
+  const le = lastEntry(ex.id);
+  if(!le) return null;
+  const sets = le.sets, eff = le.effort;
+  const lo = effLo(ex), hi = effHi(ex), st = stepFor(ex);
+  const gap = daysSince(le.date);
   const rusty = gap != null && gap >= 12;
   const grp = GROUP_OF[ex.cat] || 'push';
 
@@ -853,21 +954,17 @@ function suggestNext(ex){
       const target = Math.max(1, Math.round(maxR * layoffFactor(gap, grp)));
       return {bw:true, dir:'hold', tag:`${offLabel(gap)} — aim ~${target} reps, leave a couple in the tank`};
     }
-    const climbing = tops.length>=2 && tops[tops.length-1].r > tops[0].r;
+    if(maxR >= hi && eff === 'grind') return {bw:true, dir:'hold', tag:`${maxR} reps but a grind — own it once more`};
     if(maxR >= hi) return {bw:true, dir:'up', tag: addLoad>0 ? `add load past +${fmt(addLoad)} kg` : `add load — past ${hi} reps`};
+    const climbing = tops.length>=2 && tops[tops.length-1].r > tops[0].r;
     return {bw:true, dir:'hold', tag: climbing ? `trending up — beat ${maxR} reps` : `beat ${maxR} reps`};
   }
 
   const topW = Math.max(...sets.map(s=>s.w));
-  const repsAtTop = Math.min(...sets.filter(s=>s.w===topW).map(s=>s.r));
-  const fixed = lo===hi, cleared = repsAtTop>=hi, inRange = repsAtTop>=lo;
-  const be = bestEver(ex.id);
 
-  // Coming back after time off: back the weight off rather than projecting a
-  // trend that stopped weeks ago. You re-earn it in two or three sessions.
+  // Coming back after time off: back the weight off rather than chasing old numbers.
   if(rusty){
-    const f = layoffFactor(gap, grp);
-    const w = Math.max(inc, round(topW * f));
+    const w = roundW(ex, Math.max(st, topW * layoffFactor(gap, grp)));
     const kept = returnMode && (returnMode.ret[grp] || 0) >= 0.25;
     return {weight: w, dir:'hold',
             tag: kept
@@ -875,32 +972,43 @@ function suggestNext(ex){
               : `${offLabel(gap)} — ease in here, then climb back to ${fmt(topW)} kg`};
   }
 
-  // trend projection via estimated 1RM over recent sessions
-  const tops = recentTops(ex.id, false);
-  const e = tops.map(t=> epley(t.w, t.r));
-  const rebuilding = be > topW + inc;          // you've handled more than this before
-  if(e.length >= 2){
-    const n=e.length; let sx=0,sy=0,sxx=0,sxy=0;
-    for(let i=0;i<n;i++){ sx+=i; sy+=e[i]; sxx+=i*i; sxy+=i*e[i]; }
-    const slope = (n*sxx - sx*sx) ? (n*sxy - sx*sy)/(n*sxx - sx*sx) : 0;
-    const projE = e[n-1] + Math.max(0, slope);                 // only project upward
-    const midReps = Math.round((lo+hi)/2);
-    let projW = round(projE / (1 + midReps/30));
-    const cap = rebuilding ? 3*inc : 2*inc;                    // bigger steps over old ground
-    projW = Math.max(topW, Math.min(projW, topW + cap, rebuilding ? be : Infinity));
-    const rising = n>=3 && tops[n-1].w>=tops[n-2].w && tops[n-2].w>=tops[n-3].w;
-    if(!inRange) return {weight: topW, dir:'repeat', tag:`build to ${lo}–${hi} at ${fmt(topW)} kg`};
-    if(cleared && rebuilding) return {weight: Math.min(topW + 2*inc, be), dir:'up', tag:`climbing back — your best is ${fmt(be)} kg`};
-    if(projW > topW) return {weight: projW, dir:'up', tag: rebuilding ? `working back toward ${fmt(be)} kg` : (rising ? 'on a roll — projected target' : 'projected from your trend')};
-    if(cleared) return {weight: topW+inc, dir:'up', tag:`cleared ${hi}${fixed?'':'+'} — step up`};
-    return {weight: topW, dir:'hold', tag: fixed ? `lock in ${hi} reps` : `chase ${hi} reps`};
+  const repsMin = Math.min(...sets.filter(s=> s.w===topW).map(s=> s.r));
+  const be = bestEver(ex.id);
+  const rebuilding = be > topW + st;            // you've handled more than this before
+
+  // A stall only counts if the last session fell short of the top of the range —
+  // hitting every rep and just not adding weight isn't a stall.
+  const stall = (rebuilding || repsMin >= hi) ? null : stallState(ex);
+  if(stall && stall.again) return {weight: topW, dir:'swap', tag:'stalled again after a reset — swap to a variation'};
+  if(stall){
+    const w = roundW(ex, topW*0.9);
+    if(w < topW) return {weight: w, dir:'reset', tag:`no progress in 3 sessions — reset to ${fmt(w)} kg and rebuild`};
   }
 
-  // single data point — simple rule
-  if(cleared) return {weight: rebuilding ? Math.min(topW+2*inc, be) : topW+inc, dir:'up',
-                      tag: rebuilding ? `climbing back — best ${fmt(be)} kg` : `cleared ${hi}${fixed?'':'+'} reps`};
-  if(inRange) return {weight: topW, dir:'hold', tag: fixed ? `lock in ${hi} reps` : `chase ${hi} reps`};
-  return {weight: topW, dir:'repeat', tag:`build to ${lo}–${hi}`};
+  if(repsMin < lo){
+    if(eff === 'grind' && repsMin <= lo-2){
+      const w = roundW(ex, topW - st);
+      if(w < topW) return {weight: w, dir:'repeat', tag:`too heavy — drop to ${fmt(w)} kg, build to ${lo}–${hi}`};
+    }
+    return {weight: topW, dir:'repeat', tag:`build to ${lo}–${hi} at ${fmt(topW)} kg`};
+  }
+
+  if(repsMin >= hi){
+    if(eff === 'grind') return {weight: topW, dir:'hold', tag:`hit ${hi} but it was a grind — own it once more`};
+    const trail = effortTrail(ex.id, 2);
+    const easyTwice = trail[0]==='easy' && trail[1]==='easy';
+    let steps = (easyTwice || rebuilding) ? 2 : 1;
+    if(steps === 2 && 2*st > topW*0.075) steps = 1;          // sanity cap on big jumps
+    let w = upFrom(ex, topW, steps);
+    if(rebuilding) w = Math.min(w, be);
+    const tag = rebuilding ? `climbing back toward ${fmt(be)} kg`
+              : (easyTwice && steps===2) ? 'easy twice running — bigger jump'
+              : `every set hit ${hi} — add weight`;
+    return {weight: w, dir:'up', tag};
+  }
+
+  return {weight: topW, dir:'hold',
+          tag: eff === 'easy' ? `felt easy — push every set to ${hi}` : `chase ${hi} reps on every set`};
 }
 
 function fillWeight(exId, w){
@@ -910,16 +1018,47 @@ function fillWeight(exId, w){
 function setRowHTML(exId, i, phW, val){
   const wv = val && val.w!=null ? ` value="${val.w}"` : '';
   const rv = val && val.r!=null ? ` value="${val.r}"` : '';
-  return `<div class="set" data-ex="${exId}">
-    <div class="sn">${i+1}</div>
+  const wu = !!(val && val.wu);
+  return `<div class="set${wu?' wu':''}" data-ex="${exId}">
+    <button type="button" class="sn" title="Tap to mark as a warm-up" onclick="toggleWarm(this)">${wu?'W':i+1}</button>
     <div class="inp"><input inputmode="decimal" data-ex="${exId}" data-f="w" placeholder="${phW}"${wv}><span class="unit">kg</span></div>
     <div class="inp"><input inputmode="numeric" data-ex="${exId}" data-f="r" placeholder=""${rv}></div>
   </div>`;
+}
+function toggleWarm(btn){
+  const row = btn.closest('.set');
+  row.classList.toggle('wu');
+  row.parentNode.querySelectorAll('.set').forEach((r,i)=>{
+    r.querySelector('.sn').textContent = r.classList.contains('wu') ? 'W' : i+1;
+  });
+}
+const EFF_OPTS = [['easy','Easy','3+ left'],['solid','Solid','1–2 left'],['grind','Grind','0 left']];
+function effortHTML(exId, sel){
+  return `<div class="effort" data-eff="${exId}"><span class="effort-l">Last set felt</span>${
+    EFF_OPTS.map(([v,l,sub])=> `<button type="button" class="effchip${sel===v?' on':''}" data-v="${v}" onclick="setEffort('${exId}','${v}')"><b>${l}</b><small>${sub}</small></button>`).join('')
+  }</div>`;
+}
+async function setEffort(id, v){
+  const cur = (id in pendingEffort) ? pendingEffort[id] : ((activeDraft && activeDraft.effort && activeDraft.effort[id]) || '');
+  pendingEffort[id] = cur === v ? '' : v;
+  document.querySelectorAll(`.effort[data-eff="${id}"] .effchip`).forEach(b=> b.classList.toggle('on', b.dataset.v === pendingEffort[id]));
+  if(activeDraft && activeDraft.entries[id]){
+    activeDraft.effort = activeDraft.effort || {};
+    if(pendingEffort[id]) activeDraft.effort[id] = pendingEffort[id]; else delete activeDraft.effort[id];
+    await persist();
+  }
 }
 
 function renderTrain(){
   computeReturnMode();
   const list = document.getElementById('exlist');
+  // keep anything typed but not yet saved across re-renders (add / remove / swap / date change)
+  const keep = {};
+  list.querySelectorAll('.setrows').forEach(c=>{
+    const rows = [...c.querySelectorAll('.set')].map(r=>({
+      w: r.querySelector('[data-f="w"]').value, r: r.querySelector('[data-f="r"]').value, wu: r.classList.contains('wu')}));
+    if(rows.some(x=> x.w!=='' || x.r!=='' || x.wu)) keep[c.dataset.rows] = rows;
+  });
   list.innerHTML = '';
   if(currentDay==='X'){ list.innerHTML = activityFormHTML(); onActType(); return; }
   const exs = workList;
@@ -931,19 +1070,22 @@ function renderTrain(){
     if(sug && !sug.bw) phW = fmt(sug.weight);
     else if(last && !(ex.bw && last.w===0)) phW = fmt(last.w);
     const saved = activeDraft && activeDraft.entries[ex.id] && activeDraft.entries[ex.id].length ? activeDraft.entries[ex.id] : null;
+    const src = keep[ex.id] || saved;
     const card = document.createElement('div');
     card.className = 'ex' + (saved ? ' saved' : '');
     card.setAttribute('data-card', ex.id);
     let rows = '';
-    const nSets = Math.max(effSets(ex), saved ? saved.length : 0);
-    for(let i=0;i<nSets;i++) rows += setRowHTML(ex.id, i, phW, saved ? saved[i] : null);
+    const nSets = Math.max(effSets(ex), src ? src.length : 0);
+    for(let i=0;i<nSets;i++) rows += setRowHTML(ex.id, i, phW, src ? src[i] : null);
 
-    const arrow = sug ? (sug.dir==='up'?'↑':sug.dir==='hold'?'→':'↺') : '';
+    const ARROW = {up:'↑', hold:'→', repeat:'↺', reset:'↓', swap:'⇄'};
     let pill;
     if(sug && sug.bw){
-      pill = `<div class="sug ${sug.dir}">${arrow} ${sug.tag}</div>`;
+      pill = `<div class="sug ${sug.dir}">${ARROW[sug.dir]} ${sug.tag}</div>`;
+    } else if(sug && sug.dir==='swap'){
+      pill = `<button class="sug swap" onclick="swapLift('${ex.id}')">⇄ ${sug.tag}</button>`;
     } else if(sug){
-      pill = `<button class="sug ${sug.dir}" onclick="fillWeight('${ex.id}',${sug.weight})">${arrow} ${fmt(sug.weight)} kg · ${sug.tag}</button>`;
+      pill = `<button class="sug ${sug.dir}" onclick="fillWeight('${ex.id}',${sug.weight})">${ARROW[sug.dir]} ${fmt(sug.weight)} kg · ${sug.tag}</button>`;
     } else if(last){
       pill = (ex.bw && last.w===0)
         ? `<div class="sug repeat">↺ last ${last.r} reps — beat it</div>`
@@ -953,6 +1095,8 @@ function renderTrain(){
     }
     const lastVal = last ? `${(ex.bw && last.w===0)?'BW':fmt(last.w)}<small style="font-size:12px;color:var(--muted-dim)">×${last.r}</small>` : '';
     const restSec = gcfg(ex).rest;
+    const effSel = (ex.id in pendingEffort) ? pendingEffort[ex.id]
+                 : ((activeDraft && activeDraft.effort && activeDraft.effort[ex.id]) || '');
 
     card.innerHTML = `
       <div class="ex-head">
@@ -974,6 +1118,7 @@ function renderTrain(){
       </div>
       <div class="colhdr"><span>Set</span><span>Weight</span><span>Reps</span></div>
       <div class="setrows" data-rows="${ex.id}">${rows}</div>
+      ${effortHTML(ex.id, effSel)}
       <div class="ex-foot">
         <button class="addset" onclick="addSetRow('${ex.id}')">+ add set</button>
         <button class="restbtn" onclick="startRest(${restSec})">⏱ rest ${fmtRest(restSec)}</button>
@@ -1057,13 +1202,15 @@ function swapLift(oldId){
   cands = cands.slice(0,6);
   if(!cands.length){ toast('No other options in that group'); return; }
   const chips = cands.map(id=> `<button class="swapchip" onclick="doSwap('${oldId}','${id}')">${EXDEF[id].name}</button>`).join('');
-  const tray = `<div class="swaptray"><span class="swaptray-l">Don't feel like it? Swap for:</span>${chips}<button class="swapchip cancel" onclick="swapLift('${oldId}')">✕ keep</button></div>`;
+  const lbl = mainIds().has(oldId) ? 'Main lift for this block — swapping is just for today:' : "Don't feel like it? Swap for:";
+  const tray = `<div class="swaptray"><span class="swaptray-l">${lbl}</span>${chips}<button class="swapchip cancel" onclick="swapLift('${oldId}')">✕ keep</button></div>`;
   card.querySelector('.ex-head').insertAdjacentHTML('afterend', tray);
 }
 function doSwap(oldId, newId){
   const i = workList.findIndex(e=> e.id===oldId);
   if(i<0 || !EXDEF[newId]) return;
   workList[i] = EXDEF[newId];
+  delete pendingEffort[oldId];
   if(activeDraft && activeDraft.entries[oldId]){ delete activeDraft.entries[oldId]; persist(); }
   renderTrain();
   toast(`Swapped to ${EXDEF[newId].name}`);
@@ -1116,9 +1263,23 @@ function openInfo(id){
       <div class="dm-sub">Works: <b style="color:var(--amber)">${m.label}</b> · target ${repsLabel(ex)}</div>
       ${bodySVG(new Set(m.regions))}
       ${cue ? `<div class="info-cue"><span class="info-cue-l">Form</span>${cue}</div>` : ''}
+      ${ex.bw ? '' : stepPickerHTML(ex)}
       <button class="btn btn-primary" onclick="closeInfo()">Done</button>`;
   }
   document.getElementById('infomodal').classList.add('show');
+}
+function stepPickerHTML(ex){
+  const cur = (PREFS.inc && PREFS.inc[ex.id]) || null;
+  const opts = [null, 1, 1.25, 2, 2.5, 5];
+  const chips = opts.map(v=> `<button class="typechip${cur===v?' on':''}" onclick="setStep('${ex.id}',${v===null?'null':v})">${v===null?`Default ${fmt(ex.inc||2.5)} kg`:fmt(v)+' kg'}</button>`).join('');
+  return `<div class="info-cue"><span class="info-cue-l">Weight step</span><div class="stepchips">${chips}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">Suggestions round to this step, and snap to weights you've actually logged — handy for cable stacks and odd dumbbells.</div></div>`;
+}
+async function setStep(id, v){
+  if(v == null) delete PREFS.inc[id]; else PREFS.inc[id] = v;
+  PREFS.updated = Date.now();
+  await persist(); scheduleSync();
+  openInfo(id); renderTrain();
 }
 function closeInfo(){ document.getElementById('infomodal').classList.remove('show'); }
 
@@ -1137,7 +1298,7 @@ function lastSession(){
 }
 // most recent lifting session (ignores activity logs) — drives the generator
 function lastLiftSession(){
-  return sessions.filter(s=> s.kind!=='activity' && s.entries && Object.keys(s.entries).length)
+  return doneSessions().filter(s=> s.kind!=='activity' && s.entries && Object.keys(s.entries).length)
     .sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id)[0] || null;
 }
 
@@ -1245,7 +1406,7 @@ const PLAN_TYPES = [
 function buildPlan(type){
   type = type || 'auto';
   const last = lastLiftSession();
-  const n = sessions.filter(s=> s.kind!=='activity').length;
+  const n = doneSessions().filter(s=> s.kind!=='activity').length;
   const did = new Set(last ? Object.keys(last.entries) : []);
   const didCat = c => [...did].some(id=> PATTERN[id]===c);
   const backToBack = last ? gapDays(last.date) <= 1 : false;
@@ -1264,6 +1425,11 @@ function buildPlan(type){
     cats.forEach(c=> cand = cand.concat(CAND[c]||[]));
     cand = cand.filter(id=> roles.includes(EXDEF[id].role));
     if(!cand.length) return null;
+    if(roles.includes('compound')){
+      const mains = mainIds();
+      const pref = cand.find(id=> mains.has(id) && !skip.has(id) && EXDEF[id].role==='compound');
+      if(pref) return pref;
+    }
     const start = (n + salt) % cand.length;
     for(let i=0;i<cand.length;i++){ const id = cand[(start+i)%cand.length]; if(!skip.has(id)) return id; }
     return cand[start];
@@ -1310,7 +1476,7 @@ function buildPlan(type){
     recoveryNote = ` (Factored in your ${af.activity.toLowerCase()} ${when(af.gap)} — light enough to train as normal.)`;
   }
   const b2bNote = recoveryNote;
-  let title, why;
+  let title, why, slot = null;
 
   if(type==='upper'){
     add(pick([pushLead],['compound'],avoid,2));
@@ -1356,6 +1522,28 @@ function buildPlan(type){
     add(pick(['biceps'],['iso'],avoid,5));
     add(pick(['core'],['iso'],avoid,6));
     title='Full body · pull lead'; why='Pulling emphasis — back, lats and biceps get the volume, balanced by a press and a leg lift.'+b2bNote;
+  } else if(type==='auto'){
+    ensureBlock();
+    slot = (last && last.slot) ? (last.slot==='A' ? 'B' : 'A') : (lastLower==='knee' ? 'B' : 'A');
+    const mains = SLOT_CATS[slot].map(c=> BLOCK[slot][c]);
+    const allMain = mainIds();
+    let subbed = '';
+    mains.forEach(id=>{
+      if(easeLower && HIGH_FATIGUE.has(id)){
+        const alt = pick([PATTERN[id]], ['compound'], new Set([...HIGH_FATIGUE, ...allMain, ...ids]), 0);
+        if(alt && !HIGH_FATIGUE.has(alt)){ add(alt); subbed = ` ${getName(id)} is swapped for ${getName(alt)} today to spare your legs.`; return; }
+      }
+      add(id);
+    });
+    const skipAcc = () => new Set([...avoid, ...ids, ...allMain]);
+    const acc = slot==='A'
+      ? [[['hinge'],['accessory','iso']], [['vpush'],['accessory','iso','compound']], [['hpull','vpull'],['iso']],
+         [['biceps'],['iso']], [['triceps'],['iso','compound']], [['calf'],['iso']]]
+      : [[['knee'],['accessory','iso']], [['hpush'],['accessory','iso','compound']], [['hpull','vpull'],['iso']],
+         [['biceps'],['iso']], [['triceps'],['iso','compound']], [['core'],['iso']]];
+    acc.forEach(([cats, roles], i)=> add(pick(cats, roles, skipAcc(), i+1)));
+    title = `Session ${slot} · ${slot==='A'?'squat':'hinge'} lead`;
+    why = `Main lifts — ${mains.map(getName).join(', ')} — stay fixed for the block so they keep progressing; accessories rotate.${subbed}${b2bNote}`;
   } else {
     const lead = type==='quad' ? 'knee' : type==='hinge' ? 'hinge' : lowerLead;
     const otherLower = lead==='knee' ? 'hinge' : 'knee';
@@ -1384,10 +1572,56 @@ function buildPlan(type){
   }
   let out = ids.filter(Boolean);
   if(rm) out = out.slice(0, rm.days >= 35 ? 5 : 6);
-  return { type, title, why, ids: out };
+  return { type, title, why, ids: out, slot };
 }
 
 function planFromLast(){ return buildPlan(currentPlanType); }
+
+// ── Training block: main lifts stay fixed for 6 weeks so they can progress ──
+// Session A leads with a squat, B with a hinge; accessories keep rotating.
+const SLOT_CATS = {A:['knee','hpush','vpull'], B:['hinge','vpush','hpull']};
+function mainIds(){
+  const s = new Set();
+  if(BLOCK) ['A','B'].forEach(sl=> Object.values(BLOCK[sl]||{}).forEach(id=> s.add(id)));
+  return s;
+}
+function newBlock(rotate){
+  const prev = BLOCK;
+  const b = {start: todayStr(), weeks: 6, A:{}, B:{}, updated: Date.now()};
+  ['A','B'].forEach(sl=> SLOT_CATS[sl].forEach(cat=>{
+    const comps = (CAND[cat]||[]).filter(id=> EXDEF[id].role==='compound');
+    let id;
+    if(rotate && prev && prev[sl] && prev[sl][cat]){
+      const i = comps.indexOf(prev[sl][cat]);
+      id = comps[(i+1) % comps.length];
+    } else {
+      // start with what you already have numbers for; ties keep library order
+      id = comps.slice().sort((a,c)=> sessionsWith(c).length - sessionsWith(a).length)[0];
+    }
+    b[sl][cat] = id;
+  }));
+  return b;
+}
+function ensureBlock(){
+  if(BLOCK && BLOCK.A && BLOCK.B) return;
+  BLOCK = newBlock(false);
+  BLOCK.updated = 0;           // auto-created: a synced block from another device wins
+  persist();
+}
+function blockWeek(){
+  if(!BLOCK) return 1;
+  const planned = (document.getElementById('sessdate')||{}).value || todayStr();
+  const d = Math.round((new Date(planned+'T00:00:00') - new Date(BLOCK.start+'T00:00:00'))/86400000);
+  return Math.floor(Math.max(0,d)/7) + 1;
+}
+async function startNewBlock(){
+  const done = blockWeek() > BLOCK.weeks;
+  if(!done && !confirm('Start a new block now? Each main lift rotates to a fresh variation for the next 6 weeks.')) return;
+  BLOCK = newBlock(true);
+  await persist(); scheduleSync();
+  setPlanType('auto');
+  toast('New block started');
+}
 
 function renderPlanBanner(plan){
   const el = document.getElementById('planbanner');
@@ -1398,9 +1632,19 @@ function renderPlanBanner(plan){
   const when = isNaN(d) ? 'Next session' : d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
   const cs = returnMode ? Math.max(2, SCHEME.compound.sets-1) : SCHEME.compound.sets;
   const isets = returnMode ? Math.max(2, SCHEME.iso.sets-1) : SCHEME.iso.sets;
+  let blockHTML = '';
+  if(plan.type==='auto' && BLOCK){
+    const wk = blockWeek(), done = wk > BLOCK.weeks;
+    const mains = ['A','B'].map(sl=> `<b>${sl}:</b> ${SLOT_CATS[sl].map(c=> getName(BLOCK[sl][c])).join(', ')}`).join('<br>');
+    blockHTML = `<div class="pb-why" style="margin-top:8px">${done
+        ? `<b>Block complete</b> — ${BLOCK.weeks} weeks done. Time to rotate the main lifts.`
+        : `<b>Block week ${wk} of ${BLOCK.weeks}.</b>`}<br>${mains}</div>
+      <button class="pb-btn${done?' hot':''}" onclick="startNewBlock()">${done?'Start new block':'New block'}</button>`;
+  }
   el.innerHTML = `<div class="pb-title">${when} · ${plan.title}</div>
     <div class="pb-why">${plan.why}</div>
-    <div class="pb-why" style="margin-top:6px"><b>Targets:</b> compounds ${cs}×${SCHEME.compound.lo}–${SCHEME.compound.hi}, isolation ${isets}×${SCHEME.iso.lo}–${SCHEME.iso.hi}, ~1–2 min rest.</div>`;
+    <div class="pb-why" style="margin-top:6px"><b>Targets:</b> ${cs} sets on compounds, ${isets} on isolation — each lift's rep range is on its card. Rate the last set of each lift so the next suggestion knows how hard it was; tap a set number to mark a warm-up.</div>
+    ${blockHTML}`;
 }
 
 function buildAutoPlan(){
@@ -1408,7 +1652,7 @@ function buildAutoPlan(){
   // back-to-back recovery are measured against today (push the date out to plan ahead)
   document.getElementById('sessdate').value = todayStr();
   const plan = planFromLast();
-  currentPlanTitle = plan.title;
+  currentPlanTitle = plan.title; currentPlanSlot = plan.slot || null;
   workList = plan.ids.map(id=> EXDEF[id]).filter(Boolean);
   renderPlanBanner(plan);
   renderTypePick();
@@ -1425,7 +1669,7 @@ function renderTypePick(){
 function setPlanType(t){
   currentPlanType = t;
   const plan = planFromLast();
-  currentPlanTitle = plan.title;
+  currentPlanTitle = plan.title; currentPlanSlot = plan.slot || null;
   workList = plan.ids.map(id=> EXDEF[id]).filter(Boolean);
   renderPlanBanner(plan);
   renderTypePick();
@@ -1435,7 +1679,7 @@ function setPlanType(t){
 function onDateChange(){
   if(currentDay==='N'){            // regenerate — a 1-day gap trains differently to a 7-day gap
     const plan = planFromLast();
-    currentPlanTitle = plan.title;
+    currentPlanTitle = plan.title; currentPlanSlot = plan.slot || null;
     workList = plan.ids.map(id=> EXDEF[id]).filter(Boolean);
     renderPlanBanner(plan);
     renderTrain();
@@ -1445,10 +1689,12 @@ function onDateChange(){
 function setDay(d){
   // if there's an in-progress draft from a different mode, finalise it so work isn't lost
   if(activeDraft && activeDraft.mode!==d){
-    if(Object.keys(activeDraft.entries).length){ delete activeDraft.draft; persist(); }
+    if(Object.keys(activeDraft.entries).length){ delete activeDraft.draft; persist(); scheduleSync(); }
     else { sessions = sessions.filter(s=> s!==activeDraft); }
     activeDraft = null;
   }
+  if(!activeDraft) pendingEffort = {};
+  document.getElementById('exlist').innerHTML = '';     // fresh screen — don't carry typed values over
   currentDay = d;
   ['N','C','X'].forEach(x=> document.getElementById('day-'+x).classList.toggle('on', d===x));
   if(d==='N'){ currentPlanType = 'auto'; buildAutoPlan(); }
@@ -1524,7 +1770,7 @@ function readCardSets(ex){
     const r = parseInt(row.querySelector('input[data-f="r"]').value);
     if(ex.bw && (isNaN(w) || w<0)) w = 0;
     const okW = ex.bw ? (w>=0) : (!isNaN(w) && w>0);
-    if(okW && !isNaN(r) && r>0) sets.push({w, r});
+    if(okW && !isNaN(r) && r>0) sets.push(row.classList.contains('wu') ? {w, r, wu:true} : {w, r});
   });
   return sets;
 }
@@ -1534,7 +1780,8 @@ function ensureDraft(){
   const date = document.getElementById('sessdate').value || todayStr();
   const label = currentDay==='N' ? (currentPlanTitle || 'Session') : 'Custom';
   activeDraft = { id:Date.now(), date, day:label, mode:currentDay,
-                  plan: workList.map(e=>e.id), entries:{}, draft:true };
+                  slot: (currentDay==='N' && currentPlanType==='auto') ? currentPlanSlot : null,
+                  plan: workList.map(e=>e.id), entries:{}, effort:{}, draft:true };
   sessions.push(activeDraft);
   return activeDraft;
 }
@@ -1547,6 +1794,8 @@ async function saveLift(exId){
   if(!sets.length){ toast('Enter a set first'); return; }
   const d = ensureDraft();
   d.entries[exId] = sets;
+  d.effort = d.effort || {};
+  if(pendingEffort[exId]) d.effort[exId] = pendingEffort[exId];
   d.plan = workList.map(e=>e.id);
   d.date = document.getElementById('sessdate').value || d.date;
   await persist();
@@ -1558,10 +1807,12 @@ async function saveLift(exId){
 }
 
 // ── Post-session feedback ───────────────────────────────────────────────────
+// best working set: highest estimated 1RM (so 60 × 8 beats a heavier single), or most reps for bodyweight
 function topOf(sets, bw){
+  const ws = workSets(sets);
   return bw
-    ? sets.reduce((m,s)=> (s.r>m.r || (s.r===m.r && s.w>m.w)) ? s : m, sets[0])
-    : sets.reduce((m,s)=> s.w>m.w ? s : m, sets[0]);
+    ? ws.reduce((m,s)=> (s.r>m.r || (s.r===m.r && s.w>m.w)) ? s : m, ws[0])
+    : ws.reduce((m,s)=>{ const e=epley(s.w,s.r), em=epley(m.w,m.r); return (e>em || (e===em && s.w>m.w)) ? s : m; }, ws[0]);
 }
 function buildFeedback(sess){
   const earlier = s => (s.date < sess.date) || (s.date===sess.date && s.id < sess.id);
@@ -1572,13 +1823,13 @@ function buildFeedback(sess){
   const GROUP = {knee:'legs',hinge:'legs',calf:'legs',hpush:'push',vpush:'push',hpull:'pull',vpull:'pull',biceps:'arms',triceps:'arms',core:'core'};
   Object.keys(sess.entries).forEach(id=>{
     const ex = EXDEF[id] || {id, name:getName(id)};
-    const sets = sess.entries[id];
+    const sets = workSets(sess.entries[id]);
     totalSets += sets.length;
     sets.forEach(s=> totalVol += (s.w||0)*s.r);
     if(PATTERN[id]) groups.add(GROUP[PATTERN[id]]);
     const cur = topOf(sets, ex.bw);
     let bestPrev=0, bestPrevR=0;
-    prior.forEach(s=>{ if(s.entries[id]) s.entries[id].forEach(st=>{ if(st.w>bestPrev)bestPrev=st.w; if(st.r>bestPrevR)bestPrevR=st.r; }); });
+    prior.forEach(s=>{ if(s.entries[id]) workSets(s.entries[id]).forEach(st=>{ if(st.w>bestPrev)bestPrev=st.w; if(st.r>bestPrevR)bestPrevR=st.r; }); });
     const prevSess = prior.find(s=> s.entries[id] && s.entries[id].length);
     let dir='new', text='first time logged — baseline';
     if(prevSess){
@@ -1604,7 +1855,7 @@ function buildFeedback(sess){
           else if(dr<0){ dir='down'; text=`▼ ${-dr} reps`; }
           else { dir='same'; text=`held ${fmt(cur.w)} kg × ${cur.r}`; }
         }
-        if(cur.w>bestPrev) prs++;
+        if(Math.max(...sets.map(x=> x.w||0))>bestPrev) prs++;
         if(!afterBreak && cur.w===prev.w && cur.r<=prev.r) stalls.push(ex.name);
       }
     }
@@ -1612,7 +1863,8 @@ function buildFeedback(sess){
     if(EXDEF[id]){
       withTarget++;
       const lo = effLo(ex), hi = effHi(ex);
-      const repsTop = ex.bw ? cur.r : Math.min(...sets.filter(s=>s.w===cur.w).map(s=>s.r));
+      const heavy = Math.max(...sets.map(s=> s.w||0));
+      const repsTop = ex.bw ? cur.r : Math.min(...sets.filter(s=>s.w===heavy).map(s=>s.r));
       if(repsTop >= hi) cleared++;
       else if(repsTop < lo) below++;
       // a weight jump that dropped reps below the target floor
@@ -1691,6 +1943,7 @@ async function saveSession(){
     sessions.push({ id:Date.now(), date, kind:'activity', activity,
       durationMin:dur, distanceKm:isNaN(dist)?null:dist, intensity:intensity||null, note });
     await persist();
+    scheduleSync();
     renderProgress();
     setDay('N');
     toast(`${activity} logged`);
@@ -1709,12 +1962,19 @@ async function saveSession(){
     toast('Add a lift and enter a set'); return;
   }
   // finalise
+  d.effort = d.effort || {};
+  Object.keys(pendingEffort).forEach(id=>{
+    if(!d.entries[id]) return;
+    if(pendingEffort[id]) d.effort[id] = pendingEffort[id]; else delete d.effort[id];
+  });
+  if(currentDay==='N' && currentPlanType==='auto') d.slot = currentPlanSlot;
   d.day = currentDay==='N' ? (currentPlanTitle || 'Session') : 'Custom';
   delete d.draft;
   const fb = buildFeedback(d);     // compare against history before clearing
   d.recap = fb;
   activeDraft = null;
   await persist();
+  scheduleSync();
 
   renderProgress();
   setDay('N');                       // roll forward to the next programmed session
@@ -1750,50 +2010,51 @@ function spark(points){
 
 function renderProgress(){
   const wrap = document.getElementById('proglist');
-  const allIds = [...new Set([
-    ...Object.keys(EXDEF),
-    ...sessions.flatMap(s=> Object.keys(s.entries||{}))
-  ])];
-  let html='';
-  let any=false;
+  const done = doneSessions();
+  const allIds = [...new Set([...Object.keys(EXDEF), ...done.flatMap(s=> Object.keys(s.entries||{}))])];
+  let html='', any=false;
   allIds.forEach(id=>{
-    const series = sessions
-      .filter(s=> s.entries && s.entries[id] && s.entries[id].length)
-      .sort((a,b)=> a.date.localeCompare(b.date))
-      .map(s=>{
-        const top = s.entries[id].reduce((m,x)=> x.w>m.w?x:m, s.entries[id][0]);
-        return {date:s.date, w:top.w, r:top.r};
-      });
+    const bw = !!(EXDEF[id] && EXDEF[id].bw);
+    const series = seriesFor(id);
     if(!series.length) return;
-    any=true;
+    any = true;
+    // Bodyweight: chart reps until you add load, then added kg. Weighted: estimated 1RM,
+    // which credits extra reps as well as extra weight.
+    const loaded = bw && series.some(p=> p.w>0);
+    const byReps = bw && !loaded;
+    const val = p => byReps ? p.r : bw ? p.w : p.e;
+    const unit = byReps ? ' reps' : ' kg';
     const cur = series[series.length-1];
-    const best = series.reduce((m,x)=> x.w>m.w?x:m, series[0]);
+    const best = series.reduce((m,x)=> val(x)>val(m)?x:m, series[0]);
     let delta='';
     if(series.length>1){
-      const prev = series[series.length-2].w;
-      const diff = cur.w - prev;
-      if(diff>0) delta=`<span class="delta up">▲ +${fmt(diff)} kg vs last</span>`;
-      else if(diff<0) delta=`<span class="delta flat">▼ ${fmt(diff)} kg vs last</span>`;
-      else delta=`<span class="delta flat">— held at ${fmt(cur.w)} kg</span>`;
+      const diff = val(cur) - val(series[series.length-2]);
+      const what = (!bw) ? ' est. 1RM' : '';
+      if(diff>0.05) delta=`<span class="delta up">▲ +${fmt(diff)}${unit}${what} vs last</span>`;
+      else if(diff<-0.05) delta=`<span class="delta flat">▼ ${fmt(diff)}${unit}${what} vs last</span>`;
+      else delta=`<span class="delta flat">— held</span>`;
     }
+    const topTxt = byReps ? `${cur.r}<small> reps</small>`
+                 : bw ? `+${fmt(cur.w)}<small> ×${cur.r}</small>`
+                 : `${fmt(cur.w)}<small> ×${cur.r}</small>`;
+    const k2 = bw ? 'Best' : 'Est. 1RM';
+    const v2 = byReps ? `${best.r}<small> reps</small>` : bw ? `+${fmt(best.w)}<small> kg</small>` : `${fmt(cur.e)}<small> kg</small>`;
     html += `<div class="pex">
       <div class="pex-top">
         <h3 class="pex-name">${getName(id)}</h3>
         <div class="pstats">
-          <div class="stat"><div class="k">Top set</div><div class="v">${fmt(cur.w)}<small> ×${cur.r}</small></div></div>
-          <div class="stat"><div class="k">Best</div><div class="v">${fmt(best.w)}<small> kg</small></div></div>
+          <div class="stat"><div class="k">Top set</div><div class="v">${topTxt}</div></div>
+          <div class="stat"><div class="k">${k2}</div><div class="v">${v2}</div></div>
         </div>
       </div>
-      ${spark(series.map(p=>p.w))}
+      ${spark(series.map(val))}
       ${delta||'<span class="delta flat">First entry — baseline set</span>'}
     </div>`;
   });
   wrap.innerHTML = any ? html : '<div class="empty">No sessions logged yet. Log your first one in the Train tab and your numbers will start tracking here.</div>';
-  // nudge to restore if the log looks freshly empty (only the built-in seed sessions)
-  const userData = sessions.some(s=> !SEEDS.some(sd=> sd.id===s.id));
   const hint = document.getElementById('imphint');
   if(hint){
-    if(!userData){ hint.classList.add('show'); hint.innerHTML = `Starting fresh? If you logged workouts in an earlier version, tap <b>Import backup</b> below to restore them.`; }
+    if(!sessions.length){ hint.classList.add('show'); hint.innerHTML = `Starting fresh? If you logged workouts in an earlier version, tap <b>Import backup</b> below to restore them.`; }
     else hint.classList.remove('show');
   }
   renderHistory();
@@ -1828,9 +2089,10 @@ function renderHistory(){
       const arr = Array.isArray(s.entries[id]) ? s.entries[id] : [];
       const setsTxt = arr.map(st=>{
         const w = (ex && ex.bw && st.w===0) ? 'BW' : fmt(st.w)+' kg';
-        return `${w} × ${st.r}`;
+        return `${w} × ${st.r}${st.wu?'<span style="color:var(--muted-dim)"> w</span>':''}`;
       }).join('   ');
-      return `<div class="hx"><span class="hx-n">${getName(id)}</span><span class="hx-s">${setsTxt}</span></div>`;
+      const eff = s.effort && s.effort[id] ? `<span style="color:var(--muted-dim);font-size:11px"> · ${s.effort[id]}</span>` : '';
+      return `<div class="hx"><span class="hx-n">${getName(id)}${eff}</span><span class="hx-s">${setsTxt}</span></div>`;
     }).join('') : '<div class="hx"><span class="hx-n" style="color:var(--muted-dim)">No exercise detail recorded for this session</span></div>';
     let recap = '';
     if(ids.length){
@@ -1840,7 +2102,7 @@ function renderHistory(){
     }
     return `<div class="hitem">
       <div class="hrow">
-        <div class="hd"><b>${label}</b> · ${ids.length} lift${ids.length!==1?'s':''}<div class="dt">${dstr}</div></div>
+        <div class="hd"><b>${label}</b> · ${ids.length} lift${ids.length!==1?'s':''}<div class="dt">${dstr}${s.draft?' · in progress':''}</div></div>
         <button class="del" onclick="delSession(${s.id})">Delete</button>
       </div>
       <div class="hdetail open">${detail}${recap}</div>
@@ -1849,11 +2111,15 @@ function renderHistory(){
 }
 
 async function resetAll(){
-  if(!confirm('Delete all logged sessions? This cannot be undone.')) return;
+  const msg = syncReady()
+    ? 'Delete all logged sessions? This also clears them from the GitHub copy. It cannot be undone (export a backup first if unsure).'
+    : 'Delete all logged sessions? This cannot be undone.';
+  if(!confirm(msg)) return;
+  const now = Date.now();
+  sessions.forEach(s=>{ if(!s.draft) TOMB[s.id] = now; });
   sessions = [];
   activeDraft = null;
-  try{ await window.storage.delete(KEY); }catch(e){}
-  await persist();
+  await persist(); scheduleSync();
   workList = [];
   renderProgress();
   setDay('N');
@@ -1861,9 +2127,11 @@ async function resetAll(){
 }
 
 async function delSession(id){
+  const s = sessions.find(x=> x.id===id);
   if(activeDraft && activeDraft.id===id) activeDraft = null;
+  if(s && !s.draft) TOMB[id] = Date.now();
   sessions = sessions.filter(s=> s.id!==id);
-  await persist();
+  await persist(); scheduleSync();
   renderProgress();
   if(currentDay==='N') buildAutoPlan();
   renderTrain();
@@ -1871,8 +2139,8 @@ async function delSession(id){
 
 // ── Backup: export / import ─────────────────────────────────────────────────
 function exportPayload(){
-  return JSON.stringify({ app:'IronLog', version:1, exported:new Date().toISOString(),
-    sessions, names:NAMES_REG }, null, 0);
+  return JSON.stringify({ app:'IronLog', version:2, exported:new Date().toISOString(),
+    sessions, names:NAMES_REG, prefs:PREFS, block:BLOCK, tombstones:TOMB }, null, 0);
 }
 function closeData(){ document.getElementById('datamodal').classList.remove('show'); }
 
@@ -1940,14 +2208,175 @@ async function doImport(){
   if(!Array.isArray(incoming) || !incoming.length){ toast('No sessions found in that backup'); return; }
   const have = new Set(sessions.map(s=>s.id));
   let added = 0;
-  incoming.forEach(s=>{ if(s && s.id!=null && !have.has(s.id)){ sessions.push(s); have.add(s.id); added++; } });
+  incoming.forEach(s=>{
+    if(s && s.id!=null && !have.has(s.id)){
+      if(TOMB[s.id]) s.restoredAt = Date.now();          // restoring something deleted earlier
+      sessions.push(s); have.add(s.id); added++;
+    }
+  });
   if(data && data.names) NAMES_REG = Object.assign({}, data.names, NAMES_REG);
+  if(data && data.prefs && (!PREFS.updated || (data.prefs.updated||0) > PREFS.updated)){ PREFS = data.prefs; PREFS.inc = PREFS.inc || {}; }
+  if(data && data.block && (!BLOCK || !BLOCK.updated || (data.block.updated||0) > BLOCK.updated)) BLOCK = data.block;
   activeDraft = sessions.find(s=> s.draft) || null;
-  await persist();
+  await persist(); scheduleSync();
   closeData();
   renderProgress();
   setDay('N');
   toast(`Imported — ${added} new session${added!==1?'s':''} added`);
+}
+
+// ── GitHub sync ─────────────────────────────────────────────────────────────
+// Keeps your log as a JSON file in a GitHub repo. Pull → merge → push, so PC and
+// phone converge: sessions are unioned by id, deletions travel as tombstones,
+// block and weight-step settings go to whichever was changed most recently.
+function syncReady(){ return !!(SYNC && SYNC.owner && SYNC.repo && SYNC.token && SYNC.path); }
+function ghUrl(){
+  return `https://api.github.com/repos/${encodeURIComponent(SYNC.owner)}/${encodeURIComponent(SYNC.repo)}/contents/`
+       + SYNC.path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+}
+function ghHeaders(raw){ return {'Authorization':'Bearer '+SYNC.token, 'Accept': raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json'}; }
+function ghFail(status){
+  const e = new Error('HTTP '+status); e.status = status;
+  e.friendly = status===401 ? 'token rejected — check it hasn\u2019t expired'
+             : status===403 ? 'token can\u2019t write to that repo'
+             : status===404 ? 'repo or branch not found'
+             : (status===409||status===422) ? 'conflict — try again'
+             : `GitHub error ${status}`;
+  return e;
+}
+function b64enc(str){ const b = new TextEncoder().encode(str); let bin=''; for(let i=0;i<b.length;i+=8192) bin += String.fromCharCode(...b.subarray(i,i+8192)); return btoa(bin); }
+function b64dec(b64){ const bin = atob(b64.replace(/\s/g,'')); return new TextDecoder().decode(Uint8Array.from(bin, c=> c.charCodeAt(0))); }
+function stable(v){
+  if(Array.isArray(v)) return '['+v.map(stable).join(',')+']';
+  if(v && typeof v==='object') return '{'+Object.keys(v).sort().filter(k=> v[k]!==undefined).map(k=> JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';
+  return JSON.stringify(v===undefined ? null : v);
+}
+function syncPayload(){
+  return { app:'IronLog', version:2, sessions: doneSessions().slice().sort((a,b)=> a.id-b.id),
+           names: NAMES_REG, prefs: PREFS, block: BLOCK, tombstones: TOMB };
+}
+function canonRemote(d){
+  return { app:'IronLog', version:2, sessions:(d.sessions||[]).filter(s=> s && !s.draft).slice().sort((a,b)=> a.id-b.id),
+           names:d.names||{}, prefs:d.prefs||{inc:{},updated:0}, block:d.block||null, tombstones:d.tombstones||{} };
+}
+function isDead(s){ const t = TOMB[s.id]; return !!t && t > (s.restoredAt||0); }
+function mergeRemote(data){
+  if(!data || !Array.isArray(data.sessions)) return false;
+  const before = stable(syncPayload());
+  const rt = data.tombstones || {};
+  Object.keys(rt).forEach(k=>{ if(!TOMB[k] || rt[k] > TOMB[k]) TOMB[k] = rt[k]; });
+  const idx = new Map(sessions.map((s,i)=> [s.id, i]));
+  data.sessions.forEach(r=>{
+    if(!r || r.id==null || r.draft) return;
+    if(!idx.has(r.id)){ sessions.push(r); idx.set(r.id, sessions.length-1); }
+    else { const l = sessions[idx.get(r.id)]; if(!l.draft && (r.restoredAt||0) > (l.restoredAt||0)) sessions[idx.get(r.id)] = r; }
+  });
+  sessions = sessions.filter(s=> s.draft || !isDead(s));
+  if(data.names) NAMES_REG = Object.assign({}, data.names, NAMES_REG);
+  if(data.prefs && (!PREFS.updated || (data.prefs.updated||0) > PREFS.updated)){ PREFS = data.prefs; PREFS.inc = PREFS.inc || {}; }
+  if(data.block && data.block.A && (!BLOCK || !BLOCK.updated || (data.block.updated||0) > BLOCK.updated)) BLOCK = data.block;
+  return stable(syncPayload()) !== before;
+}
+async function ghGet(){
+  const url = ghUrl() + '?ref=' + encodeURIComponent(SYNC.branch||'main');
+  const r = await fetch(url, {headers: ghHeaders(false), cache:'no-store'});
+  if(r.status===404) return {data:null, sha:null};
+  if(!r.ok) throw ghFail(r.status);
+  const j = await r.json();
+  let text = j.content ? b64dec(j.content) : '';
+  if(!text && j.size > 0){                      // over 1 MB: fetch the raw file instead
+    const r2 = await fetch(url, {headers: ghHeaders(true), cache:'no-store'});
+    if(!r2.ok) throw ghFail(r2.status);
+    text = await r2.text();
+  }
+  let data = null;
+  if(text){ try{ data = JSON.parse(text); }catch(e){ const x = new Error('bad file'); x.friendly = 'the file in GitHub isn\u2019t Iron.Log data'; throw x; } }
+  return {data, sha: j.sha};
+}
+async function ghPut(payload, sha){
+  const body = { message:`Iron.Log sync · ${new Date().toISOString().slice(0,16).replace('T',' ')}`,
+                 content: b64enc(JSON.stringify(payload, null, 1)), branch: SYNC.branch||'main' };
+  if(sha) body.sha = sha;
+  const r = await fetch(ghUrl(), {method:'PUT', headers:{...ghHeaders(false), 'Content-Type':'application/json'}, body:JSON.stringify(body), cache:'no-store'});
+  if(!r.ok) throw ghFail(r.status);
+}
+let syncing = false, syncAgain = false, syncTimer = null;
+function scheduleSync(){
+  if(!syncReady()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(()=> syncNow(false), 1500);
+}
+async function syncNow(manual){
+  if(!syncReady()){ if(manual) toast('Set up GitHub sync first'); return; }
+  if(syncing){ syncAgain = true; return; }
+  syncing = true; updateSyncStatus('Syncing…');
+  try{
+    for(let attempt=0; attempt<3; attempt++){
+      const {data, sha} = await ghGet();
+      if(mergeRemote(data)){ await persist(); refreshAfterSync(); }
+      const payload = syncPayload();
+      if(data && stable(canonRemote(data)) === stable(payload)) break;     // already identical — no commit
+      try{ await ghPut(payload, sha); break; }
+      catch(e){ if((e.status===409 || e.status===422) && attempt<2) continue; throw e; }
+    }
+    SYNC.last = new Date().toISOString(); SYNC.err = null;
+    if(manual) toast('Synced with GitHub');
+  }catch(e){
+    SYNC.err = e.friendly || (e instanceof TypeError ? 'no connection' : (e.message || 'failed'));
+    if(manual) toast('Sync failed — ' + SYNC.err);
+  }finally{
+    syncing = false;
+    try{ await window.storage.set(SKEY, JSON.stringify(SYNC)); }catch(e){}
+    updateSyncStatus();
+    if(syncAgain){ syncAgain = false; setTimeout(()=> syncNow(false), 500); }
+  }
+}
+function refreshAfterSync(){
+  renderProgress();
+  const typed = [...document.querySelectorAll('#exlist input')].some(i=> i.value);
+  if(currentDay==='N' && !activeDraft && !typed){ buildAutoPlan(); renderTrain(); }
+}
+function updateSyncStatus(busy){
+  const el = document.getElementById('syncstat');
+  if(!el) return;
+  el.classList.toggle('err', !!(SYNC && SYNC.err) && !busy);
+  if(!syncReady()){ el.textContent = 'GitHub sync is off — your log lives on this device only.'; return; }
+  if(busy){ el.textContent = busy; return; }
+  const when = SYNC.last ? new Date(SYNC.last).toLocaleString(undefined,{weekday:'short',hour:'numeric',minute:'2-digit'}) : 'not yet';
+  el.textContent = `Synced to ${SYNC.owner}/${SYNC.repo} · last ${when}` + (SYNC.err ? ` · last attempt failed: ${SYNC.err}` : '');
+}
+function escA(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function openSync(){
+  const c = SYNC || {branch:'main', path:'ironlog-data.json'};
+  const fld = (id,l,v,ph,type)=> `<label class="fld syfld"><span class="fld-l">${l}</span><input id="${id}" type="${type||'text'}" value="${escA(v)}" placeholder="${escA(ph)}" autocapitalize="off" autocomplete="off" spellcheck="false"></label>`;
+  document.getElementById('datamodal-card').innerHTML = `
+    <div class="dm-h">GitHub sync</div>
+    <div class="dm-sub">Saves your log to a JSON file in a GitHub repo after every session and pulls it when the app opens, so your PC and phone stay in step. Use a <b>private</b> repo, and a fine-grained token limited to that one repo with <b>Contents: Read and write</b>. The token stays on this device.</div>
+    ${fld('sy-owner','Owner (your GitHub username)',c.owner,'e.g. mhancock')}
+    ${fld('sy-repo','Repository',c.repo,'e.g. ironlog-data')}
+    <div class="fld-row">${fld('sy-branch','Branch',c.branch||'main','main')}${fld('sy-path','File',c.path||'ironlog-data.json','ironlog-data.json')}</div>
+    ${fld('sy-token','Token', '', c.token ? '•••••••• saved — leave blank to keep' : 'github_pat_…', 'password')}
+    <div class="dm-row">
+      ${SYNC ? '<button class="btn btn-ghost" onclick="disconnectSync()">Turn off</button>' : ''}
+      <button class="btn btn-ghost" onclick="closeData()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSyncCfg()">Save &amp; sync</button>
+    </div>`;
+  document.getElementById('datamodal').classList.add('show');
+}
+async function saveSyncCfg(){
+  const v = id => (document.getElementById(id).value||'').trim();
+  const cfg = { owner:v('sy-owner'), repo:v('sy-repo'), branch:v('sy-branch')||'main',
+                path:(v('sy-path')||'ironlog-data.json').replace(/^\/+/,''), token: v('sy-token') || (SYNC && SYNC.token) || '' };
+  if(!cfg.owner || !cfg.repo || !cfg.token){ toast('Owner, repo and token are needed'); return; }
+  SYNC = Object.assign({}, cfg, {last: SYNC && SYNC.repo===cfg.repo ? SYNC.last : null, err:null});
+  try{ await window.storage.set(SKEY, JSON.stringify(SYNC)); }catch(e){}
+  closeData();
+  syncNow(true);
+}
+async function disconnectSync(){
+  SYNC = null;
+  try{ await window.storage.delete(SKEY); }catch(e){}
+  closeData(); updateSyncStatus(); toast('GitHub sync turned off');
 }
 
 let toastT;
@@ -1962,19 +2391,15 @@ function toast(msg){
 (async function(){
   document.getElementById('sessdate').value = todayStr();
   await loadSessions();
-  // Seed the 13 Jun sessions only when storage is empty (a fresh/lost-data load),
-  // so they're never silently lost on an update — but won't fight your real data.
-  const hadData = sessions.length > 0;
-  if(!hadData){
-    SEEDS.forEach(s=>{ if(!sessions.some(x=> x.id===s.id)) sessions.push(s); });
-    try{ await persist(); }catch(e){}
-  }
+  ensureBlock();
   // resume an in-progress (draft) session if one exists
   const draft = sessions.find(s=> s.draft);
   if(draft){
     activeDraft = draft;
     currentDay = draft.mode || 'C';
     currentPlanTitle = draft.day || '';
+    currentPlanSlot = draft.slot || null;
+    pendingEffort = Object.assign({}, draft.effort || {});
     ['N','C','X'].forEach(x=> document.getElementById('day-'+x).classList.toggle('on', currentDay===x));
     document.getElementById('planbanner').classList.add('hidden');
     document.getElementById('sessdate').value = draft.date;
@@ -1985,6 +2410,10 @@ function toast(msg){
   } else {
     setDay('N');
   }
+  updateSyncStatus();
+  if(syncReady()) syncNow(false);
+  window.addEventListener('online', scheduleSync);
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') scheduleSync(); });
 })();
 </script>
 </body>
