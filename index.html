@@ -6,12 +6,8 @@
 <title>Iron.Log</title>
 <meta name="theme-color" content="#0B0F18">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Iron.Log">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.png">
-<link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -226,6 +222,13 @@
   .syfld input{font-family:'Inter'!important;font-size:14px!important;font-weight:500!important}
   .syncstat{font-size:12px;color:var(--muted-dim);margin-top:8px;line-height:1.4;text-align:center}
   .syncstat.err{color:#F2B266}
+
+  .sect-h{font-family:'Barlow Condensed',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+    font-size:15px;color:var(--muted);margin:4px 0 10px}
+  .sect-h.gap{margin-top:22px}
+  .wkbars{width:100%;height:96px;display:block;margin-top:6px}
+  .actmeta{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.45}
+  .actmeta b{color:var(--chalk);font-weight:600}
 
   /* recap modal */
   .modal{
@@ -496,7 +499,7 @@
       </div>
       <div class="syncstat" id="syncstat"></div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-09-30 · v7</div>
+      <div class="buildtag">Iron.Log · build 2026-10-04 · v8.1</div>
     </div>
   </section>
 </div>
@@ -937,7 +940,7 @@ function computeReturnMode(){
 //  • then add one step — two if it felt easy twice running (capped at ~7.5%)
 //  • hit the top but it was a grind → repeat the weight
 //  • three sessions without progress → reset ~10%; stalls again → swap variation
-function suggestNext(ex){
+function suggestBase(ex){
   const le = lastEntry(ex.id);
   if(!le) return null;
   const sets = le.sets, eff = le.effort;
@@ -1011,6 +1014,28 @@ function suggestNext(ex){
           tag: eff === 'easy' ? `felt easy — push every set to ${hi}` : `chase ${hi} reps on every set`};
 }
 
+// Non-gym activity in the last few days caps progression on the muscles it worked:
+// heavy load → hold the weight, moderate → one step at most.
+function suggestNext(ex){
+  const sug = suggestBase(ex);
+  if(!sug || !FAT || sug.dir !== 'up') return sug;
+  const grp = GROUP_OF[ex.cat] || 'push';
+  const lv = FAT.level(grp);
+  if(lv === 'fresh') return sug;
+  const what = fatWhat(grp);
+  const le = lastEntry(ex.id);
+  if(lv === 'heavy'){
+    if(sug.bw) return {bw:true, dir:'hold', tag:`hold reps — your ${what} ${what.includes(' and ')?'are':'is'} still in your ${GROUP_WORD[grp]}`};
+    const topW = Math.max(...le.sets.map(s=> s.w));
+    return {weight: topW, dir:'hold', tag:`holding ${fmt(topW)} kg — your ${what} ${what.includes(' and ')?'are':'is'} still in your ${GROUP_WORD[grp]}`};
+  }
+  if(!sug.bw){
+    const one = upFrom(ex, Math.max(...le.sets.map(s=> s.w)), 1);
+    if(sug.weight > one) return {...sug, weight: one, tag:`one step only — after your ${what}`};
+  }
+  return sug;
+}
+
 function fillWeight(exId, w){
   document.querySelectorAll(`#exlist input[data-ex="${exId}"][data-f="w"]`).forEach(i=> i.value = w);
 }
@@ -1051,6 +1076,7 @@ async function setEffort(id, v){
 
 function renderTrain(){
   computeReturnMode();
+  computeFatigue();
   const list = document.getElementById('exlist');
   // keep anything typed but not yet saved across re-renders (add / remove / swap / date change)
   const keep = {};
@@ -1318,11 +1344,57 @@ function gapDays(lastDate){
   return d > 0 ? d : 1;
 }
 
-// how much each activity taxes the legs / posterior chain (0 none → 2 heavy)
-const ACT_LEG = {
-  'Run':2,'Hike':2,'Football':2,'Squash':2,'Cycle':1,'Walk':1,'Tennis':1,
-  'Rowing':1,'Climbing':1,'Other':1,'Swim':0,'Yoga / mobility':0
+// How hard each activity works each muscle group, per minute at moderate effort
+// (1.0 = a moderate run on the legs). `sys` is whole-body / systemic fatigue.
+// Load = minutes × intensity × profile, halving every 24 hours.
+const ACT_PROFILE = {
+  'Run':            {lower:1.0, push:.00, pull:.00, core:.30, sys:1.0},
+  'Football':       {lower:1.0, push:.05, pull:.05, core:.30, sys:1.0},
+  'Squash':         {lower:.90, push:.20, pull:.20, core:.40, sys:1.0},
+  'Tennis':         {lower:.70, push:.25, pull:.15, core:.30, sys:.80},
+  'Hike':           {lower:.80, push:.00, pull:.00, core:.20, sys:.70},
+  'Cycle':          {lower:.70, push:.00, pull:.00, core:.10, sys:.80},
+  'Rowing':         {lower:.60, push:.10, pull:.80, core:.40, sys:.90},
+  'Climbing':       {lower:.30, push:.20, pull:1.0, core:.50, sys:.70},
+  'Swim':           {lower:.30, push:.60, pull:.70, core:.30, sys:.80},
+  'Walk':           {lower:.30, push:.00, pull:.00, core:.00, sys:.30},
+  'Yoga / mobility':{lower:.10, push:.10, pull:.05, core:.20, sys:.10},
+  'Other':          {lower:.50, push:.20, pull:.20, core:.20, sys:.60},
 };
+const INT_MULT = {Easy:.6, Moderate:1, Hard:1.5};
+const GROUP_WORD = {lower:'legs', push:'pressing muscles', pull:'back and arms', core:'core', sys:'body'};
+function profileOf(s){ return ACT_PROFILE[s.activity] || ACT_PROFILE['Other']; }
+function actMinutes(s){ return (s.durationMin||0) * (INT_MULT[s.intensity] || 1); }
+const FAT_HEAVY = 30, FAT_MOD = 15;
+let FAT = null;
+// Residual fatigue per group going into the planned session date, from activities
+// in the 3 days before it (same-day counts in full). Multiple activities add up.
+function computeFatigue(){
+  const planned = (document.getElementById('sessdate')||{}).value || todayStr();
+  const pms = new Date(planned+'T00:00:00').getTime();
+  const out = {lower:0, push:0, pull:0, core:0, sys:0, src:{}, all:{}};
+  doneSessions().filter(s=> s.kind==='activity').forEach(s=>{
+    const gap = Math.round((pms - new Date(s.date+'T00:00:00').getTime())/86400000);
+    if(gap < 0 || gap > 3) return;
+    const decay = Math.pow(0.5, gap), p = profileOf(s), m = actMinutes(s);
+    ['lower','push','pull','core','sys'].forEach(g=>{
+      const v = (p[g]||0) * m * decay;
+      out[g] += v;
+      if(v > 0){ (out.all[g] = out.all[g] || []).push({v, s, gap}); if(!out.src[g] || v > out.src[g].v) out.src[g] = {v, s, gap}; }
+    });
+  });
+  out.level = g => out[g] >= FAT_HEAVY ? 'heavy' : out[g] >= FAT_MOD ? 'moderate' : 'fresh';
+  FAT = out;
+  return out;
+}
+// "run yesterday and climbing today" — the activities carrying most of a group's load
+function fatWhat(g){
+  if(!FAT || !FAT.all[g]) return 'recent activity';
+  const tot = FAT[g];
+  const parts = FAT.all[g].slice().sort((a,b)=> b.v-a.v).filter((o,i)=> i===0 || o.v >= tot*0.25).slice(0,2);
+  return parts.map(o=> `${o.s.activity.toLowerCase()} ${whenTxt(o.gap)}`).join(' and ');
+}
+function whenTxt(g){ return g<=0 ? 'today' : g===1 ? 'yesterday' : `${g} days ago`; }
 
 // What a non-lifting activity preserves while you're away from the bar, by
 // muscle group. Ceilings are deliberately modest: running maintains conditioning
@@ -1363,6 +1435,9 @@ function retentionOverGap(sinceDate){
     const avgMin = list.reduce((a,s)=> a+(s.durationMin||0),0)/list.length;
     if(avgMin >= 60) scale = Math.min(1, scale*1.15);          // longer efforts count more
     if(avgMin && avgMin < 25) scale *= 0.7;
+    const hard = list.filter(s=> s.intensity==='Hard').length / list.length;
+    const easy = list.filter(s=> s.intensity==='Easy').length / list.length;
+    scale = Math.min(1, scale * (1 + 0.15*hard - 0.2*easy));          // hard efforts hold more
     Object.keys(out).forEach(g=>{ out[g] = Math.max(out[g], (m[g]||0)*scale); });
   });
   out.count = acts.length;
@@ -1372,26 +1447,13 @@ function retentionOverGap(sinceDate){
 
 // look at activities logged since the last lift and up to the planned date, and
 // decide whether the legs are likely still fatigued going into this session
-function activityFatigue(lastLiftDate){
-  const planned = document.getElementById('sessdate').value;
-  if(!planned) return null;
-  const pms = new Date(planned+'T00:00:00').getTime();
-  const intMult = i => i==='Hard' ? 1.5 : i==='Easy' ? 0.6 : 1;   // Moderate / blank = 1
-  let best = null;
-  sessions.filter(s=> s.kind==='activity').forEach(s=>{
-    const ams = new Date(s.date+'T00:00:00').getTime();
-    const gap = Math.round((pms - ams)/86400000);
-    if(gap < 0 || gap > 3) return;                                 // only the few days before
-    if(lastLiftDate && s.date < lastLiftDate) return;              // only since the last lift
-    const base = ACT_LEG[s.activity] != null ? ACT_LEG[s.activity] : 1;
-    let score = base * intMult(s.intensity);
-    if((s.durationMin||0) >= 90 || (s.distanceKm||0) >= 12) score += 0.5;  // long efforts add up
-    if(gap >= 2) score *= 0.5;                                     // older = mostly recovered
-    if(!best || score > best.score) best = {score, gap, s};
-  });
-  if(!best) return null;
-  return { ease: best.score >= 2 && best.gap <= 1, score: best.score, gap: best.gap,
-           activity: best.s.activity, intensity: best.s.intensity, date: best.s.date };
+// legacy shape used by the planner: leg-focused summary of computeFatigue()
+function activityFatigue(){
+  const f = computeFatigue();
+  const src = f.src.lower;
+  if(!src) return null;
+  return { ease: f.lower >= FAT_HEAVY, score: f.lower, gap: src.gap,
+           activity: src.s.activity, intensity: src.s.intensity, f };
 }
 
 // THE ENGINE — builds a full session. type 'auto' rotates off the last workout;
@@ -1471,9 +1533,19 @@ function buildPlan(type){
   } else if(backToBack){
     recoveryNote = ' Heavy axial work is eased since you trained yesterday.';
   } else if(af && af.ease){
-    recoveryNote = ` You logged a ${af.intensity?af.intensity.toLowerCase()+' ':''}${af.activity.toLowerCase()} ${when(af.gap)}, so heavy leg work is eased today.`;
-  } else if(af && af.gap<=1 && af.score>=1){
-    recoveryNote = ` (Factored in your ${af.activity.toLowerCase()} ${when(af.gap)} — light enough to train as normal.)`;
+    recoveryNote = ` Your ${fatWhat('lower')} left the legs tired, so heavy leg work is eased and leg weights hold.`;
+  } else if(af && af.score >= FAT_MOD){
+    recoveryNote = ` Your ${fatWhat('lower')} is factored in — fine to train, but leg lifts move one step at most.`;
+  } else if(af && af.score >= 5){
+    recoveryNote = ` (Factored in your ${fatWhat('lower')} — light enough to train as normal.)`;
+  }
+  if(!rm && FAT){
+    ['pull','push'].forEach(g=>{
+      if(FAT.level(g)==='heavy' && FAT.src[g]){
+        recoveryNote += ` Your ${fatWhat(g)} worked the ${GROUP_WORD[g]}, so those lifts hold their weight.`;
+      }
+    });
+    if(FAT.sys >= 45) recoveryNote += ' You\u2019ve done a lot in the last couple of days, so the session is trimmed by two accessories.';
   }
   const b2bNote = recoveryNote;
   let title, why, slot = null;
@@ -1572,6 +1644,7 @@ function buildPlan(type){
   }
   let out = ids.filter(Boolean);
   if(rm) out = out.slice(0, rm.days >= 35 ? 5 : 6);
+  else if(FAT && FAT.sys >= 45 && out.length > 5) out = out.slice(0, out.length - 2);
   return { type, title, why, ids: out, slot };
 }
 
@@ -1702,6 +1775,22 @@ function setDay(d){
   renderTrain();
 }
 
+// ── Screen wake lock (Android Chrome) ───────────────────────────────────────
+// Keeps the screen on while a workout is in progress or a rest timer is running,
+// so you're not unlocking the phone between sets. Released when the session ends.
+let wakeLock = null;
+function wantWake(){ return currentDay!=='X' && (!!activeDraft || document.getElementById('resttimer').classList.contains('show')); }
+async function updateWake(){
+  try{
+    if(wantWake() && !wakeLock && 'wakeLock' in navigator && document.visibilityState==='visible'){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', ()=>{ wakeLock = null; });
+    } else if(!wantWake() && wakeLock){ await wakeLock.release(); wakeLock = null; }
+  }catch(e){ wakeLock = null; }
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') updateWake(); });
+function buzz(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(e){} }
+
 // ── Rest timer ──────────────────────────────────────────────────────────────
 let restInt, restEnd;
 function startRest(sec){
@@ -1711,6 +1800,7 @@ function startRest(sec){
   el.classList.add('show'); el.classList.remove('done');
   tickRest();
   restInt = setInterval(tickRest, 250);
+  updateWake();
 }
 function tickRest(){
   const el = document.getElementById('resttimer');
@@ -1719,7 +1809,8 @@ function tickRest(){
     clearInterval(restInt);
     el.classList.add('done');
     el.textContent = 'Rest done — go';
-    setTimeout(()=>{ el.classList.remove('show','done'); }, 4000);
+    buzz([250,120,250]);
+    setTimeout(()=>{ el.classList.remove('show','done'); updateWake(); }, 4000);
     return;
   }
   el.textContent = `Rest ${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
@@ -1727,6 +1818,7 @@ function tickRest(){
 function stopRest(){
   clearInterval(restInt);
   document.getElementById('resttimer').classList.remove('show','done');
+  updateWake();
 }
 
 function clearInputs(){
@@ -1804,6 +1896,8 @@ async function saveLift(exId){
   const btn = document.getElementById('sv-'+exId);
   if(btn){ btn.classList.add('done'); btn.textContent = '✓ Saved'; }
   toast(`${ex.name} saved`);
+  buzz(40);
+  updateWake();
 }
 
 // ── Post-session feedback ───────────────────────────────────────────────────
@@ -1893,7 +1987,10 @@ function buildFeedback(sess){
   const liftSorted = sessions.filter(s=> s.kind!=='activity' && s.entries).sort((a,b)=> b.date.localeCompare(a.date)||b.id-a.id);
   let noLeg=0;
   for(const s of liftSorted){ const hasLeg=Object.keys(s.entries).some(id=> ['knee','hinge','calf'].includes(PATTERN[id])); if(hasLeg) break; noLeg++; }
-  if(noLeg>=2) notes.push(`That's ${noLeg} sessions without legs — a lower-body day is due.`);
+  const lastLeg = liftSorted.find(s=> Object.keys(s.entries).some(id=> ['knee','hinge','calf'].includes(PATTERN[id])));
+  const legActs = doneSessions().filter(s=> s.kind==='activity' && profileOf(s).lower >= .6 && s.date >= (lastLeg ? lastLeg.date : ''));
+  if(noLeg>=2 && !legActs.length) notes.push(`That's ${noLeg} sessions without legs — a lower-body day is due.`);
+  else if(noLeg>=2) notes.push(`No leg lifts for ${noLeg} sessions, though your ${[...new Set(legActs.map(a=>a.activity.toLowerCase()))].join(' and ')} kept them working — a squat or hinge would still round it out.`);
 
   // Lead with the return-to-training framing so the numbers read correctly.
   const firstPrior = prior.find(s=> s.entries && Object.keys(s.entries).length);
@@ -1940,13 +2037,14 @@ async function saveSession(){
     const intensity = document.getElementById('act-int').value;
     const note = (document.getElementById('act-note').value||'').trim();
     if(isNaN(dur) || dur<=0){ toast('Enter a duration'); return; }
-    sessions.push({ id:Date.now(), date, kind:'activity', activity,
-      durationMin:dur, distanceKm:isNaN(dist)?null:dist, intensity:intensity||null, note });
+    const act = { id:Date.now(), date, kind:'activity', activity,
+      durationMin:dur, distanceKm:isNaN(dist)?null:dist, intensity:intensity||null, note };
+    sessions.push(act);
     await persist();
     scheduleSync();
     renderProgress();
     setDay('N');
-    toast(`${activity} logged`);
+    showActRecap(act);
     return;
   }
 
@@ -1978,6 +2076,7 @@ async function saveSession(){
 
   renderProgress();
   setDay('N');                       // roll forward to the next programmed session
+  updateWake();
   showRecap(fb, d);
 }
 
@@ -2051,7 +2150,10 @@ function renderProgress(){
       ${delta||'<span class="delta flat">First entry — baseline set</span>'}
     </div>`;
   });
-  wrap.innerHTML = any ? html : '<div class="empty">No sessions logged yet. Log your first one in the Train tab and your numbers will start tracking here.</div>';
+  const actHTML = activityProgressHTML();
+  wrap.innerHTML = (actHTML || any)
+    ? actHTML + (any ? `<div class="sect-h${actHTML?' gap':''}">Lifts</div>` + html : '')
+    : '<div class="empty">No sessions logged yet. Log your first one in the Train tab and your numbers will start tracking here.</div>';
   const hint = document.getElementById('imphint');
   if(hint){
     if(!sessions.length){ hint.classList.add('show'); hint.innerHTML = `Starting fresh? If you logged workouts in an earlier version, tap <b>Import backup</b> below to restore them.`; }
@@ -2071,6 +2173,7 @@ function renderHistory(){
     if(s.kind==='activity'){
       const bits = [`${s.durationMin} min`];
       if(s.distanceKm) bits.push(`${fmt(s.distanceKm)} km`);
+      const sp = paceOf(s); if(sp) bits.push(sp.txt);
       if(s.intensity) bits.push(s.intensity.toLowerCase());
       const note = s.note ? `<div class="hx"><span class="hx-n" style="color:var(--muted)">${s.note}</span></div>` : '';
       return `<div class="hitem">
@@ -2379,6 +2482,144 @@ async function disconnectSync(){
   closeData(); updateSyncStatus(); toast('GitHub sync turned off');
 }
 
+// ── Activity tracking ───────────────────────────────────────────────────────
+const PACE_MODE = {Run:'km', Walk:'km', Hike:'km', Cycle:'kmh', Swim:'100m', Rowing:'500m'};
+function mmss(min){ const t = Math.round(min*60); return `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`; }
+function paceOf(s){
+  if(!s || !s.distanceKm || !s.durationMin) return null;
+  const mode = PACE_MODE[s.activity];
+  if(!mode) return null;
+  if(mode === 'kmh'){ const v = s.distanceKm/(s.durationMin/60); return {v, better:'high', txt:`${fmt(v)} km/h`}; }
+  const per = mode==='km' ? 1 : mode==='100m' ? 0.1 : 0.5;
+  const v = s.durationMin/(s.distanceKm/per);
+  return {v, better:'low', txt:`${mmss(v)} /${mode}`};
+}
+function isBetter(p, ref){ return p.better==='low' ? p.v < ref : p.v > ref; }
+function actsOf(type){
+  return doneSessions().filter(s=> s.kind==='activity' && (!type || s.activity===type))
+    .sort((a,b)=> a.date.localeCompare(b.date) || a.id-b.id);
+}
+function daysAgo(dateStr){ return Math.round((new Date(todayStr()+'T00:00:00') - new Date(dateStr+'T00:00:00'))/86400000); }
+
+function activityFeedback(s){
+  const prior = actsOf(s.activity).filter(x=> x.id!==s.id && (x.date < s.date || (x.date===s.date && x.id < s.id)));
+  const name = s.activity.toLowerCase();
+  const p = paceOf(s);
+  const prs = [], notes = [];
+  if(p){
+    // fair comparison: only against efforts at least 80% as long
+    const comp = prior.filter(x=> x.distanceKm && x.distanceKm >= s.distanceKm*0.8).map(paceOf).filter(Boolean);
+    if(comp.length){
+      const best = p.better==='low' ? Math.min(...comp.map(c=>c.v)) : Math.max(...comp.map(c=>c.v));
+      if(isBetter(p, best)) prs.push(`Fastest ${name} pace at this distance or longer — ${p.txt}.`);
+    }
+  }
+  if(s.distanceKm && prior.some(x=> x.distanceKm) && s.distanceKm > Math.max(...prior.map(x=> x.distanceKm||0)))
+    prs.push(`Longest ${name} yet — ${fmt(s.distanceKm)} km.`);
+  if(prior.length && s.durationMin > Math.max(...prior.map(x=> x.durationMin||0)))
+    prs.push(`Longest ${name} by time — ${s.durationMin} min.`);
+  const last = prior[prior.length-1];
+  if(last){
+    const lp = paceOf(last);
+    let line = `Last ${name} (${new Date(last.date+'T00:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short'})}): ${last.durationMin} min`;
+    if(last.distanceKm) line += `, ${fmt(last.distanceKm)} km`;
+    if(lp && p) line += `, ${lp.txt} → ${isBetter(p, lp.v) ? 'quicker' : (Math.abs(p.v-lp.v) < 0.01 ? 'same pace' : 'steadier')} today`;
+    notes.push(line + '.');
+  } else notes.push(`First ${name} logged — this is your baseline.`);
+  // four-week trend for this activity
+  const in4 = actsOf(s.activity).filter(x=> daysAgo(x.date) < 28);
+  const prev4 = actsOf(s.activity).filter(x=> daysAgo(x.date) >= 28 && daysAgo(x.date) < 56);
+  const mins = a => a.reduce((t,x)=> t+(x.durationMin||0), 0);
+  if(prev4.length) notes.push(`Last 4 weeks: ${in4.length} ${name}${in4.length!==1?'s':''}, ${mins(in4)} min — vs ${prev4.length} and ${mins(prev4)} min the 4 weeks before.`);
+  // what it means for lifting
+  const pr = profileOf(s), m = actMinutes(s);
+  const legLoad = pr.lower*m;
+  if(legLoad >= FAT_HEAVY) notes.push(`Heavy on the legs — if you lift tomorrow, squats and deadlifts are swapped for easier variations and leg weights hold.`);
+  else if(legLoad >= FAT_MOD) notes.push(`A moderate leg load — fine to lift tomorrow; leg lifts just move one step at most.`);
+  ['pull','push'].forEach(g=>{ if((pr[g]||0)*m >= FAT_HEAVY) notes.push(`It worked your ${GROUP_WORD[g]} hard too — those lifts hold their weight if you train in the next day or so.`); });
+  return {prs, notes, pace: p};
+}
+function showActRecap(s){
+  const fb = activityFeedback(s);
+  const d = new Date(s.date+'T00:00:00');
+  const dstr = d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
+  document.getElementById('recap-card').innerHTML = `
+    <div class="rc-h">${s.activity}<span class="x">.</span> logged</div>
+    <div class="rc-sub">${s.intensity ? s.intensity+' · ' : ''}${dstr}</div>
+    <div class="rc-stats">
+      <div><div class="rc-n">${s.durationMin}</div><div class="rc-k">min</div></div>
+      <div><div class="rc-n">${s.distanceKm ? fmt(s.distanceKm) : '—'}</div><div class="rc-k">km</div></div>
+      <div><div class="rc-n" style="font-size:20px">${fb.pace ? fb.pace.txt.split(' ')[0] : '—'}</div><div class="rc-k">${fb.pace ? fb.pace.txt.split(' ').slice(1).join(' ') : 'pace'}</div></div>
+    </div>
+    <div class="rc-notes">${[...fb.prs.map(t=> `<div class="rc-note"><b style="color:var(--amber)">PB</b> · ${t}</div>`), ...fb.notes.map(t=> `<div class="rc-note">${t}</div>`)].join('')}</div>
+    <button class="btn btn-primary" onclick="closeRecap()">Done</button>`;
+  document.getElementById('recap').classList.add('show');
+}
+// weekly minutes for the last 8 weeks: activity bars, with lifting sessions noted underneath
+function weekBarsSVG(){
+  const W = 300, H = 96, n = 8, bw = 26, gap = (W - n*bw)/(n-1);
+  const weeks = [];
+  for(let i=n-1;i>=0;i--){
+    const inWeek = x=> { const a = daysAgo(x.date); return a >= i*7 && a < i*7+7; };
+    weeks.push({ mins: actsOf().filter(inWeek).reduce((t,x)=> t+(x.durationMin||0), 0),
+                 lifts: doneSessions().filter(x=> x.kind!=='activity' && x.entries && Object.keys(x.entries).length && inWeek(x)).length,
+                 label: i===0 ? 'now' : `-${i}w` });
+  }
+  const max = Math.max(60, ...weeks.map(w=> w.mins));
+  return `<svg class="wkbars" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${weeks.map((w,i)=>{
+    const x = i*(bw+gap), h = Math.round((w.mins/max)*(H-34));
+    return `<rect x="${x}" y="${H-28-h}" width="${bw}" height="${Math.max(h,1)}" rx="3" fill="${w.mins?'var(--amber)':'var(--surface-2)'}"/>
+      ${w.mins?`<text x="${x+bw/2}" y="${H-32-h}" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="Inter">${w.mins}</text>`:''}
+      <text x="${x+bw/2}" y="${H-15}" text-anchor="middle" font-size="9" fill="var(--muted-dim)" font-family="Inter">${w.label}</text>
+      <text x="${x+bw/2}" y="${H-3}" text-anchor="middle" font-size="9" fill="var(--steel)" font-family="Inter">${w.lifts?w.lifts+'×🏋':''}</text>`;
+  }).join('')}</svg>`;
+}
+function activityProgressHTML(){
+  const all = actsOf();
+  if(!all.length) return '';
+  const types = [...new Set(all.map(a=> a.activity))]
+    .sort((a,b)=> actsOf(b).slice(-1)[0].date.localeCompare(actsOf(a).slice(-1)[0].date));
+  let html = `<div class="sect-h">Activity</div>
+    <div class="pex"><div class="pex-top"><h3 class="pex-name">Weekly minutes</h3></div>
+      ${weekBarsSVG()}
+      <div class="actmeta">Bars are activity minutes per week; the blue count under each is lifting sessions.</div></div>`;
+  types.forEach(t=>{
+    const list = actsOf(t);
+    const in4 = list.filter(x=> daysAgo(x.date) < 28), prev4 = list.filter(x=> daysAgo(x.date) >= 28 && daysAgo(x.date) < 56);
+    const mins = a => a.reduce((s,x)=> s+(x.durationMin||0), 0);
+    const kms = a => a.reduce((s,x)=> s+(x.distanceKm||0), 0);
+    const paced = list.map(x=> ({x, p: paceOf(x)})).filter(o=> o.p);
+    const last = list[list.length-1];
+    let stat1, stat2, sparkPts, delta = '';
+    if(paced.length){
+      const lp = paced[paced.length-1].p;
+      const best = paced.reduce((m,o)=> isBetter(o.p, m.p.v) ? o : m, paced[0]);
+      stat1 = `<div class="stat"><div class="k">Last pace</div><div class="v" style="font-size:17px">${lp.txt}</div></div>`;
+      stat2 = `<div class="stat"><div class="k">Best</div><div class="v" style="font-size:17px">${best.p.txt.split(' ')[0]}</div></div>`;
+      sparkPts = paced.slice(-12).map(o=> o.p.better==='low' ? -o.p.v : o.p.v);     // up = faster
+      if(paced.length > 1){
+        const prev = paced[paced.length-2].p;
+        delta = isBetter(lp, prev.v) ? `<span class="delta up">▲ quicker than last time</span>` : `<span class="delta flat">— ${Math.abs(lp.v-prev.v)<0.01?'same pace as':'steadier than'} last time</span>`;
+      }
+    } else {
+      stat1 = `<div class="stat"><div class="k">Last</div><div class="v">${last.durationMin}<small> min</small></div></div>`;
+      stat2 = `<div class="stat"><div class="k">Longest</div><div class="v">${Math.max(...list.map(x=> x.durationMin||0))}<small> min</small></div></div>`;
+      sparkPts = list.slice(-12).map(x=> x.durationMin||0);
+    }
+    const trend = prev4.length
+      ? (mins(in4) > mins(prev4) ? ` <span class="up">▲ up from ${mins(prev4)} min</span>` : mins(in4) < mins(prev4) ? ` <span class="flat">▼ down from ${mins(prev4)} min</span>` : ' <span class="flat">— steady</span>')
+      : '';
+    const longest = Math.max(...list.map(x=> x.distanceKm||0));
+    html += `<div class="pex">
+      <div class="pex-top"><h3 class="pex-name">${t}</h3><div class="pstats">${stat1}${stat2}</div></div>
+      ${spark(sparkPts)}
+      ${delta || (list.length===1 ? '<span class="delta flat">First entry — baseline set</span>' : '')}
+      <div class="actmeta">Last 4 weeks: <b>${in4.length}</b> session${in4.length!==1?'s':''} · <b>${mins(in4)}</b> min${kms(in4)?` · <b>${fmt(kms(in4))}</b> km`:''}${trend}${longest?` · longest ${fmt(longest)} km`:''}</div>
+    </div>`;
+  });
+  return html;
+}
+
 let toastT;
 function toast(msg){
   const el=document.getElementById('toast');
@@ -2407,6 +2648,7 @@ function toast(msg){
     workList = ids.map(id=> EXDEF[id] || {id, name:getName(id), sets:3});
     renderTrain();
     toast('Resumed your in-progress session');
+    updateWake();
   } else {
     setDay('N');
   }
