@@ -230,6 +230,19 @@
   .actmeta{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.45}
   .actmeta b{color:var(--chalk);font-weight:600}
 
+  .hbtns{display:flex;gap:6px;flex:0 0 auto}
+  .elift{background:var(--surface-2);border:1px solid var(--hair);border-radius:12px;padding:10px 11px 6px;margin-bottom:10px}
+  .elift-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+  .elift-h b{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:18px}
+  .eset{display:grid;grid-template-columns:30px 1fr 1fr 30px;gap:6px;align-items:center;padding:4px 0}
+  .eset.wu .sn{color:var(--steel)} .eset.wu .inp input{opacity:.5}
+  .eset .sn{font-family:'Barlow Condensed',sans-serif;font-weight:600;color:var(--muted-dim);font-size:15px;
+    background:none;border:none;padding:8px 0;cursor:pointer;width:100%}
+  .eset .inp input{padding:9px 26px 9px 9px;font-size:17px;background:var(--surface)}
+  .elift .effort{margin:6px 0 2px}
+  .ebar{display:flex;gap:8px;align-items:center;margin:4px 0 2px}
+  .ebar select{flex:1;background:var(--surface-2);color:var(--chalk);border:1px solid var(--hair);border-radius:10px;padding:11px 10px;font-family:'Inter';font-size:14px}
+
   /* recap modal */
   .modal{
     position:fixed;inset:0;z-index:60;display:none;
@@ -500,7 +513,7 @@
       </div>
       <div class="syncstat" id="syncstat"></div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-10-12 · v8.2</div>
+      <div class="buildtag">Iron.Log · build 2026-10-12 · v8.3</div>
     </div>
   </section>
 </div>
@@ -2180,7 +2193,7 @@ function renderHistory(){
       return `<div class="hitem">
         <div class="hrow act">
           <div class="hd"><b>${s.activity}</b> · ${bits.join(' · ')}<div class="dt">${dstr} · activity</div></div>
-          <button class="del" onclick="delSession(${s.id})">Delete</button>
+          <div class="hbtns"><button class="del" onclick="openEdit(${s.id})">Edit</button><button class="del" onclick="delSession(${s.id})">Delete</button></div>
         </div>
         ${note ? `<div class="hdetail open">${note}</div>` : ''}
       </div>`;
@@ -2207,7 +2220,7 @@ function renderHistory(){
     return `<div class="hitem">
       <div class="hrow">
         <div class="hd"><b>${label}</b> · ${ids.length} lift${ids.length!==1?'s':''}<div class="dt">${dstr}${s.draft?' · in progress':''}</div></div>
-        <button class="del" onclick="delSession(${s.id})">Delete</button>
+        <div class="hbtns">${s.draft ? '' : `<button class="del" onclick="openEdit(${s.id})">Edit</button>`}<button class="del" onclick="delSession(${s.id})">Delete</button></div>
       </div>
       <div class="hdetail open">${detail}${recap}</div>
     </div>`;
@@ -2423,7 +2436,9 @@ function canonRemote(d){
   return { app:'IronLog', version:2, sessions:(d.sessions||[]).filter(s=> s && !s.draft).slice().sort((a,b)=> a.id-b.id),
            names:d.names||{}, prefs:d.prefs||{inc:{},updated:0}, block:d.block||null, tombstones:d.tombstones||{} };
 }
-function isDead(s){ const t = TOMB[s.id]; return !!t && t > (s.restoredAt||0); }
+// a session's version: the later of an edit or a restore — the newer copy wins on sync
+function verOf(s){ return Math.max(s.restoredAt||0, s.editedAt||0); }
+function isDead(s){ const t = TOMB[s.id]; return !!t && t > verOf(s); }
 function mergeRemote(data){
   if(!data || !Array.isArray(data.sessions)) return false;
   const before = stable(syncPayload());
@@ -2433,7 +2448,7 @@ function mergeRemote(data){
   data.sessions.forEach(r=>{
     if(!r || r.id==null || r.draft) return;
     if(!idx.has(r.id)){ sessions.push(r); idx.set(r.id, sessions.length-1); }
-    else { const l = sessions[idx.get(r.id)]; if(!l.draft && (r.restoredAt||0) > (l.restoredAt||0)) sessions[idx.get(r.id)] = r; }
+    else { const l = sessions[idx.get(r.id)]; if(!l.draft && verOf(r) > verOf(l)) sessions[idx.get(r.id)] = r; }
   });
   sessions = sessions.filter(s=> s.draft || !isDead(s));
   if(data.names) NAMES_REG = Object.assign({}, data.names, NAMES_REG);
@@ -2679,6 +2694,160 @@ function activityProgressHTML(){
     </div>`;
   });
   return html;
+}
+
+// ── Edit a logged workout or activity ───────────────────────────────────────
+let EDIT = null;     // working copy while the editor is open
+function openEdit(id){
+  const src = sessions.find(s=> s.id===id);
+  if(!src || src.draft) return;
+  EDIT = JSON.parse(JSON.stringify(src));
+  if(EDIT.kind !== 'activity'){
+    EDIT.order = (EDIT.plan && EDIT.plan.length ? EDIT.plan.filter(x=> EDIT.entries[x]) : []);
+    Object.keys(EDIT.entries).forEach(x=>{ if(!EDIT.order.includes(x)) EDIT.order.push(x); });
+    EDIT.effort = EDIT.effort || {};
+  }
+  renderEdit();
+  document.getElementById('datamodal').classList.add('show');
+}
+function editSetHTML(id, i, st){
+  const wu = !!(st && st.wu);
+  const v = k => (st && st[k] != null && st[k] !== '') ? ` value="${st[k]}"` : '';
+  return `<div class="eset${wu?' wu':''}" data-i="${i}">
+    <button type="button" class="sn" onclick="editToggleWarm('${id}',${i})">${wu?'W':i+1}</button>
+    <div class="inp"><input inputmode="decimal" data-f="w"${v('w')}><span class="unit">kg</span></div>
+    <div class="inp"><input inputmode="numeric" data-f="r"${v('r')}><span class="unit">reps</span></div>
+    <button type="button" class="rm" title="Remove set" onclick="editRemoveSet('${id}',${i})">×</button>
+  </div>`;
+}
+function renderEdit(){
+  const card = document.getElementById('datamodal-card');
+  const dateF = `<label class="fld syfld"><span class="fld-l">Date</span><input type="date" id="ed-date" value="${EDIT.date}"></label>`;
+  if(EDIT.kind === 'activity'){
+    const types = ACTIVITIES.filter(a=> a!=='Other');
+    if(!types.includes(EDIT.activity)) types.push(EDIT.activity);
+    card.innerHTML = `
+      <div class="dm-h">Edit activity</div>
+      ${dateF}
+      <label class="fld"><span class="fld-l">Activity</span><select id="ed-type">${types.map(t=> `<option${t===EDIT.activity?' selected':''}>${escA(t)}</option>`).join('')}</select></label>
+      <div class="fld-row">
+        <label class="fld"><span class="fld-l">Duration (min)</span><input id="ed-dur" inputmode="numeric" value="${EDIT.durationMin||''}"></label>
+        <label class="fld"><span class="fld-l">Distance (km) <em>opt</em></span><input id="ed-dist" inputmode="decimal" value="${EDIT.distanceKm!=null?EDIT.distanceKm:''}"></label>
+      </div>
+      <label class="fld"><span class="fld-l">Intensity</span><select id="ed-int">${['','Easy','Moderate','Hard'].map(v=> `<option value="${v}"${(EDIT.intensity||'')===v?' selected':''}>${v||'—'}</option>`).join('')}</select></label>
+      <label class="fld syfld"><span class="fld-l">Note <em>opt</em></span><input id="ed-note" value="${escA(EDIT.note||'')}"></label>
+      <div class="dm-row"><button class="btn btn-ghost" onclick="closeData()">Cancel</button><button class="btn btn-primary" onclick="saveEdit()">Save changes</button></div>`;
+    return;
+  }
+  const lifts = EDIT.order.map(id=>{
+    const sets = EDIT.entries[id] || [];
+    return `<div class="elift" data-lift="${id}">
+      <div class="elift-h"><b>${getName(id)}</b><button type="button" class="rm" title="Remove lift" onclick="editRemoveLift('${id}')">×</button></div>
+      ${sets.map((st,i)=> editSetHTML(id, i, st)).join('')}
+      <button class="addset" onclick="editAddSet('${id}')">+ add set</button>
+      ${effortHTML('ed_'+id, EDIT.effort[id]||'').replace(/setEffort\('ed_/g, "editEffort('")}
+    </div>`;
+  }).join('');
+  const opts = CAT_ORDER.map(cat=>{
+    const o = (CAND[cat]||[]).filter(id=> !EDIT.order.includes(id)).map(id=> `<option value="${id}">${EXDEF[id].name}</option>`).join('');
+    return o ? `<optgroup label="${CAT_LABEL[cat]}">${o}</optgroup>` : '';
+  }).join('');
+  const customs = Object.keys(NAMES_REG).filter(id=> !EDIT.order.includes(id)).map(id=> `<option value="${id}">${escA(NAMES_REG[id])}</option>`).join('');
+  card.innerHTML = `
+    <div class="dm-h">Edit workout</div>
+    <div class="dm-sub">${escA(EDIT.day||'Session')} · tap a set number to mark a warm-up, × to remove a set or lift.</div>
+    ${dateF}
+    ${lifts || '<div class="empty">No lifts left — add one, or cancel and delete the session instead.</div>'}
+    <div class="ebar"><select id="ed-add"><option value="">Add a lift you did…</option>${opts}${customs?`<optgroup label="Your custom lifts">${customs}</optgroup>`:''}</select>
+      <button class="btn btn-ghost" style="padding:11px 16px" onclick="editAddLift()">Add</button></div>
+    <div class="dm-row"><button class="btn btn-ghost" onclick="closeData()">Cancel</button><button class="btn btn-primary" onclick="saveEdit()">Save changes</button></div>`;
+}
+// copy what's on screen into EDIT before any re-render, so typed values survive
+function readEdit(){
+  const dEl = document.getElementById('ed-date');
+  if(dEl && dEl.value) EDIT.date = dEl.value;
+  if(EDIT.kind === 'activity') return;
+  document.querySelectorAll('#datamodal-card .elift').forEach(box=>{
+    const id = box.dataset.lift;
+    EDIT.entries[id] = [...box.querySelectorAll('.eset')].map(row=>{
+      const st = { w: row.querySelector('[data-f="w"]').value.trim(), r: row.querySelector('[data-f="r"]').value.trim() };
+      if(row.classList.contains('wu')) st.wu = true;
+      return st;
+    });
+  });
+}
+function editToggleWarm(id, i){ readEdit(); const st = EDIT.entries[id][i]; if(st.wu) delete st.wu; else st.wu = true; renderEdit(); }
+function editRemoveSet(id, i){ readEdit(); EDIT.entries[id].splice(i,1); renderEdit(); }
+function editAddSet(id){
+  readEdit();
+  const sets = EDIT.entries[id], last = sets[sets.length-1];
+  sets.push({w: last ? last.w : '', r: ''});
+  renderEdit();
+}
+function editRemoveLift(id){
+  readEdit();
+  delete EDIT.entries[id]; delete EDIT.effort[id];
+  EDIT.order = EDIT.order.filter(x=> x!==id);
+  renderEdit();
+}
+function editAddLift(){
+  readEdit();
+  const v = document.getElementById('ed-add').value;
+  if(!v || EDIT.order.includes(v)) return;
+  EDIT.order.push(v); EDIT.entries[v] = [{w:'', r:''}];
+  renderEdit();
+}
+function editEffort(id, v){
+  readEdit();
+  if(EDIT.effort[id] === v) delete EDIT.effort[id]; else EDIT.effort[id] = v;
+  renderEdit();
+}
+async function saveEdit(){
+  readEdit();
+  const i = sessions.findIndex(s=> s.id===EDIT.id);
+  if(i < 0){ closeData(); return; }
+  const out = JSON.parse(JSON.stringify(sessions[i]));
+  out.date = EDIT.date;
+  if(EDIT.kind === 'activity'){
+    const dur = parseInt(document.getElementById('ed-dur').value);
+    const dist = parseFloat(document.getElementById('ed-dist').value);
+    if(isNaN(dur) || dur <= 0){ toast('Enter a duration'); return; }
+    out.activity = document.getElementById('ed-type').value;
+    out.durationMin = dur;
+    out.distanceKm = isNaN(dist) ? null : dist;
+    out.intensity = document.getElementById('ed-int').value || null;
+    out.note = (document.getElementById('ed-note').value||'').trim();
+  } else {
+    const entries = {};
+    for(const id of EDIT.order){
+      const ex = EXDEF[id];
+      const sets = [];
+      for(const st of (EDIT.entries[id]||[])){
+        if(st.r === '') continue;                                   // no reps entered — treat as an unused row
+        let w = parseFloat(st.w); const r = parseInt(st.r);
+        if(ex && ex.bw && st.w === '') w = 0;
+        if(isNaN(w) || w < 0 || (!(ex && ex.bw) && w === 0) || isNaN(r) || r <= 0){
+          toast(`Check the sets for ${getName(id)}`); return;
+        }
+        sets.push(st.wu ? {w, r, wu:true} : {w, r});
+      }
+      if(sets.length) entries[id] = sets;
+    }
+    if(!Object.keys(entries).length){ toast('No sets left — use Delete to remove the session'); return; }
+    out.entries = entries;
+    out.plan = EDIT.order.filter(id=> entries[id]);
+    out.effort = {};
+    Object.keys(EDIT.effort||{}).forEach(id=>{ if(entries[id]) out.effort[id] = EDIT.effort[id]; });
+    delete out.recap;                                                   // recomputed on display
+  }
+  out.editedAt = Date.now();
+  sessions[i] = out;
+  EDIT = null;
+  await persist(); scheduleSync();
+  closeData();
+  renderProgress();
+  if(currentDay==='N' && !activeDraft){ buildAutoPlan(); renderTrain(); }
+  toast('Workout updated');
 }
 
 let toastT;
