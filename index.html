@@ -495,11 +495,12 @@
         <button class="databtn" onclick="openImport()">⤒ Import backup</button>
       </div>
       <div class="databtns">
+        <button class="databtn" onclick="openCSV()">⤓ Export data (CSV)</button>
         <button class="databtn" onclick="openSync()">⟳ GitHub sync</button>
       </div>
       <div class="syncstat" id="syncstat"></div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-10-04 · v8.1</div>
+      <div class="buildtag">Iron.Log · build 2026-10-12 · v8.2</div>
     </div>
   </section>
 </div>
@@ -2244,6 +2245,66 @@ async function delSession(id){
 function exportPayload(){
   return JSON.stringify({ app:'IronLog', version:2, exported:new Date().toISOString(),
     sessions, names:NAMES_REG, prefs:PREFS, block:BLOCK, tombstones:TOMB }, null, 0);
+}
+// ── CSV export for analysis in Excel (export only — the JSON backup is the restore route) ──
+function csvCell(v){
+  if(v == null) return '';
+  const t = String(v);
+  return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g,'""') + '"' : t;
+}
+function toCSV(header, rows){ return '\ufeff' + [header, ...rows].map(r=> r.map(csvCell).join(',')).join('\r\n'); }
+function liftRows(){
+  const rows = [];
+  doneSessions().filter(s=> s.kind!=='activity' && s.entries)
+    .sort((a,b)=> a.date.localeCompare(b.date) || a.id-b.id)
+    .forEach(s=>{
+      Object.keys(s.entries).forEach(id=>{
+        const ex = EXDEF[id];
+        const sets = Array.isArray(s.entries[id]) ? s.entries[id] : [];
+        const work = new Set(workSets(sets));
+        sets.forEach((st,i)=>{
+          const warm = st.wu ? 'manual' : (work.has(st) ? '' : 'auto');
+          rows.push([s.date, s.day || '', s.slot || '', getName(id), ex ? CAT_LABEL[ex.cat] : 'Custom',
+            i+1, st.w, st.r, warm, work.has(st) ? 'Y' : 'N',
+            (s.effort && s.effort[id]) || '', (st.w > 0 ? fmt(epley(st.w, st.r)) : '')]);
+        });
+      });
+    });
+  return rows;
+}
+function activityRows(){
+  return actsOf().map(s=>{
+    const p = paceOf(s);
+    const unit = p ? p.txt.split(' ').slice(1).join(' ') : '';
+    const val = p ? (p.better==='low' ? mmss(p.v) : fmt(p.v)) : '';
+    return [s.date, s.activity, s.durationMin, s.distanceKm != null ? s.distanceKm : '', val, p ? num(p.v) : '', unit, s.intensity || '', s.note || ''];
+  });
+}
+function downloadCSV(kind){
+  const lifts = kind === 'lifts';
+  const csv = lifts
+    ? toCSV(['Date','Session','Slot','Lift','Muscle group','Set','Weight (kg)','Reps','Warm-up','Working set','Effort','Est 1RM (kg)'], liftRows())
+    : toCSV(['Date','Activity','Minutes','Distance (km)','Pace','Pace (decimal)','Pace unit','Intensity','Note'], activityRows());
+  try{
+    const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+    const a = document.createElement('a');
+    a.href = url; a.download = `ironlog-${kind}-${todayStr()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1000);
+    toast(`${lifts ? 'Lifts' : 'Activities'} CSV downloaded`);
+  }catch(e){ toast('Download failed'); }
+}
+function openCSV(){
+  const nl = liftRows().length, na = activityRows().length;
+  document.getElementById('datamodal-card').innerHTML = `
+    <div class="dm-h">Export data (CSV)</div>
+    <div class="dm-sub">For your own analysis in Excel. Lifts are one row per set (warm-ups included and flagged); activities are one row per session. Export only — to restore data, use Import backup.</div>
+    <div class="dm-row">
+      <button class="btn btn-ghost" onclick="downloadCSV('lifts')" ${nl?'':'disabled'}>Lifts · ${nl} sets</button>
+      <button class="btn btn-ghost" onclick="downloadCSV('activities')" ${na?'':'disabled'}>Activities · ${na}</button>
+    </div>
+    <div class="dm-row"><button class="btn btn-primary" onclick="closeData()">Done</button></div>`;
+  document.getElementById('datamodal').classList.add('show');
 }
 function closeData(){ document.getElementById('datamodal').classList.remove('show'); }
 
