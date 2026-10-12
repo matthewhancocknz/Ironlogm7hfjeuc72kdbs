@@ -240,6 +240,10 @@
     background:none;border:none;padding:8px 0;cursor:pointer;width:100%}
   .eset .inp input{padding:9px 26px 9px 9px;font-size:17px;background:var(--surface)}
   .elift .effort{margin:6px 0 2px}
+  .eswap{background:var(--surface);border:1px dashed var(--hair-strong);border-radius:10px;padding:10px;margin:2px 0 8px}
+  .eswap select{width:100%;background:var(--surface-2);color:var(--chalk);border:1px solid var(--hair);border-radius:9px;padding:10px;font-family:'Inter';font-size:14px}
+  .eswap label{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--chalk);margin-top:8px}
+  .eswap .fine{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.4}
   .ebar{display:flex;gap:8px;align-items:center;margin:4px 0 2px}
   .ebar select{flex:1;background:var(--surface-2);color:var(--chalk);border:1px solid var(--hair);border-radius:10px;padding:11px 10px;font-family:'Inter';font-size:14px}
 
@@ -513,7 +517,7 @@
       </div>
       <div class="syncstat" id="syncstat"></div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-10-12 · v8.3</div>
+      <div class="buildtag">Iron.Log · build 2026-10-12 · v8.4</div>
     </div>
   </section>
 </div>
@@ -592,6 +596,7 @@ const LIBRARY = [
   // Shoulders / vertical push
   {id:'ohp',       name:'Overhead press',      cat:'vpush', role:'compound', lo:6, hi:10, inc:2.5},
   {id:'dbohp',     name:'DB shoulder press',   cat:'vpush', role:'compound', lo:8, hi:12, inc:2.5},
+  {id:'machohp',   name:'Machine shoulder press',cat:'vpush',role:'compound', lo:8, hi:12, inc:2.5},
   {id:'arnold',    name:'Arnold press',        cat:'vpush', role:'accessory',lo:8, hi:12, inc:2.5},
   {id:'latraise',  name:'Lateral raise',       cat:'vpush', role:'iso',      lo:12,hi:15, inc:2.5},
   {id:'rearfly',   name:'Rear delt fly',       cat:'vpush', role:'iso',      lo:12,hi:15, inc:2.5},
@@ -688,6 +693,7 @@ const CUES = {
   pecfly:'Fix a slight elbow bend, hug the weight in, squeeze the chest.',
   ohp:'Brace hard, press from the collarbone to overhead, head through at the top.',
   dbohp:'Dumbbells at shoulder height, press overhead, don\u2019t arch the back.',
+  machohp:'Handles at shoulder height, press up without locking hard, control the way down.',
   arnold:'Start palms-in, rotate to palms-forward as you press overhead.',
   latraise:'Slight forward lean, lead with the elbows to shoulder height, no swing.',
   rearfly:'Hinge over, raise out wide, squeeze the rear delts, thumbs slightly down.',
@@ -2742,7 +2748,10 @@ function renderEdit(){
   const lifts = EDIT.order.map(id=>{
     const sets = EDIT.entries[id] || [];
     return `<div class="elift" data-lift="${id}">
-      <div class="elift-h"><b>${getName(id)}</b><button type="button" class="rm" title="Remove lift" onclick="editRemoveLift('${id}')">×</button></div>
+      <div class="elift-h"><b>${getName(id)}</b><div class="hbtns">
+        <button type="button" class="swapbtn" title="This was actually a different lift" onclick="editOpenChange('${id}')">⇄</button>
+        <button type="button" class="rm" title="Remove lift" onclick="editRemoveLift('${id}')">×</button></div></div>
+      ${EDIT.changing===id ? editChangeHTML(id) : ''}
       ${sets.map((st,i)=> editSetHTML(id, i, st)).join('')}
       <button class="addset" onclick="editAddSet('${id}')">+ add set</button>
       ${effortHTML('ed_'+id, EDIT.effort[id]||'').replace(/setEffort\('ed_/g, "editEffort('")}
@@ -2755,7 +2764,8 @@ function renderEdit(){
   const customs = Object.keys(NAMES_REG).filter(id=> !EDIT.order.includes(id)).map(id=> `<option value="${id}">${escA(NAMES_REG[id])}</option>`).join('');
   card.innerHTML = `
     <div class="dm-h">Edit workout</div>
-    <div class="dm-sub">${escA(EDIT.day||'Session')} · tap a set number to mark a warm-up, × to remove a set or lift.</div>
+    <div class="dm-sub">${escA(EDIT.day||'Session')} · tap a set number to mark a warm-up, ⇄ if a lift was really a different exercise, × to remove a set or lift.</div>
+    ${(EDIT.remaps||[]).filter(m=> m.scope!=='this').map(m=> `<div class="rc-note" style="margin-bottom:10px">On save: ${getName(m.from)} → ${getName(m.to)} in ${m.scope==='all'?'every session':'every session on or before this date'} (${remapCount(m)} other session${remapCount(m)!==1?'s':''}).</div>`).join('')}
     ${dateF}
     ${lifts || '<div class="empty">No lifts left — add one, or cancel and delete the session instead.</div>'}
     <div class="ebar"><select id="ed-add"><option value="">Add a lift you did…</option>${opts}${customs?`<optgroup label="Your custom lifts">${customs}</optgroup>`:''}</select>
@@ -2775,6 +2785,55 @@ function readEdit(){
       return st;
     });
   });
+}
+// "This was really a different lift": move a lift's sets to another exercise —
+// for this session only, this and every earlier session, or the whole log.
+function liftOptionsHTML(exclude){
+  const groups = CAT_ORDER.map(cat=>{
+    const o = (CAND[cat]||[]).filter(x=> x!==exclude).map(x=> `<option value="${x}">${EXDEF[x].name}</option>`).join('');
+    return o ? `<optgroup label="${CAT_LABEL[cat]}">${o}</optgroup>` : '';
+  }).join('');
+  const customs = Object.keys(NAMES_REG).filter(x=> x!==exclude).map(x=> `<option value="${x}">${escA(NAMES_REG[x])}</option>`).join('');
+  return groups + (customs ? `<optgroup label="Your custom lifts">${customs}</optgroup>` : '');
+}
+function remapCount(m){
+  return doneSessions().filter(s=> s.id!==EDIT.id && s.kind!=='activity' && s.entries && s.entries[m.from]
+    && (m.scope==='all' || s.date <= EDIT.date)).length;
+}
+function editChangeHTML(id){
+  const cat = PATTERN[id];
+  const n = scope => remapCount({from:id, scope});
+  return `<div class="eswap">
+    <select id="ed-chg-to"><option value="">This was actually…</option>${liftOptionsHTML(id)}</select>
+    <label><input type="radio" name="ed-chg-scope" value="this" checked> Just this session</label>
+    <label><input type="radio" name="ed-chg-scope" value="earlier"> This and every earlier session (${n('earlier')} more)</label>
+    <label><input type="radio" name="ed-chg-scope" value="all"> Every session in the log (${n('all')} more)</label>
+    <div class="fine">The sets keep their weights and reps; they're just counted under the new lift from now on, so its progress, suggestions and best-ever all pick them up.</div>
+    <div class="dm-row"><button class="btn btn-ghost" onclick="editCloseChange()">Cancel</button><button class="btn btn-primary" onclick="editApplyChange('${id}')">Change</button></div>
+  </div>`;
+}
+function editOpenChange(id){ readEdit(); EDIT.changing = EDIT.changing===id ? null : id; renderEdit(); }
+function editCloseChange(){ readEdit(); EDIT.changing = null; renderEdit(); }
+function moveLift(sess, from, to){
+  const moved = sess.entries[from] || [];
+  sess.entries[to] = (sess.entries[to] || []).concat(moved);
+  delete sess.entries[from];
+  if(sess.effort && sess.effort[from]){ if(!sess.effort[to]) sess.effort[to] = sess.effort[from]; delete sess.effort[from]; }
+  if(Array.isArray(sess.plan)){
+    sess.plan = sess.plan.map(x=> x===from ? to : x).filter((x,i,a)=> a.indexOf(x)===i);
+  }
+}
+function editApplyChange(from){
+  const to = document.getElementById('ed-chg-to').value;
+  if(!to){ toast('Pick the lift it really was'); return; }
+  const scope = (document.querySelector('input[name="ed-chg-scope"]:checked')||{}).value || 'this';
+  readEdit();
+  EDIT.effort = EDIT.effort || {};
+  moveLift(EDIT, from, to);
+  EDIT.order = EDIT.order.map(x=> x===from ? to : x).filter((x,i,a)=> a.indexOf(x)===i);
+  (EDIT.remaps = EDIT.remaps || []).push({from, to, scope});
+  EDIT.changing = null;
+  renderEdit();
 }
 function editToggleWarm(id, i){ readEdit(); const st = EDIT.entries[id][i]; if(st.wu) delete st.wu; else st.wu = true; renderEdit(); }
 function editRemoveSet(id, i){ readEdit(); EDIT.entries[id].splice(i,1); renderEdit(); }
@@ -2842,12 +2901,23 @@ async function saveEdit(){
   }
   out.editedAt = Date.now();
   sessions[i] = out;
+  let others = 0;
+  (EDIT.remaps||[]).filter(m=> m.scope!=='this').forEach(m=>{
+    sessions.forEach(s=>{
+      if(s===out || s.draft || s.kind==='activity' || !s.entries || !s.entries[m.from]) return;
+      if(m.scope==='earlier' && s.date > out.date) return;
+      moveLift(s, m.from, m.to);
+      delete s.recap;
+      s.editedAt = Date.now();
+      others++;
+    });
+  });
   EDIT = null;
   await persist(); scheduleSync();
   closeData();
   renderProgress();
   if(currentDay==='N' && !activeDraft){ buildAutoPlan(); renderTrain(); }
-  toast('Workout updated');
+  toast(others ? `Updated — plus ${others} other session${others!==1?'s':''}` : 'Workout updated');
 }
 
 let toastT;
