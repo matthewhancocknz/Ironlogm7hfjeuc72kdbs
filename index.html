@@ -244,6 +244,7 @@
   .eswap select{width:100%;background:var(--surface-2);color:var(--chalk);border:1px solid var(--hair);border-radius:9px;padding:10px;font-family:'Inter';font-size:14px}
   .eswap label{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--chalk);margin-top:8px}
   .eswap .fine{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.4}
+  .inp.each input{padding-right:44px}
   .ebar{display:flex;gap:8px;align-items:center;margin:4px 0 2px}
   .ebar select{flex:1;background:var(--surface-2);color:var(--chalk);border:1px solid var(--hair);border-radius:10px;padding:11px 10px;font-family:'Inter';font-size:14px}
 
@@ -517,7 +518,7 @@
       </div>
       <div class="syncstat" id="syncstat"></div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-10-12 · v8.4</div>
+      <div class="buildtag">Iron.Log · build 2026-10-12 · v8.5</div>
     </div>
   </section>
 </div>
@@ -879,6 +880,95 @@ function bestEver(exId){
   doneSessions().forEach(s=> workSets((s.entries||{})[exId]).forEach(st=>{ if(st.w>b) b=st.w; }));
   return b;
 }
+// ── Dumbbell load basis ─────────────────────────────────────────────────────
+// Lifts that use a pair of dumbbells are logged per hand by default ("kg each").
+// A lift can be switched to "total" in its ⓘ panel. Volume counts both hands.
+const PAIR_DB = new Set(['dbbench','dbincl','dbohp','arnold','latraise','rearfly','dbcurl','hammer','lunge','bsplit']);
+function basisOf(id){ return PAIR_DB.has(id) ? ((PREFS.basis && PREFS.basis[id]) || 'each') : 'total'; }
+function perHand(id){ return basisOf(id) === 'each'; }
+function unitTxt(id){ return perHand(id) ? 'kg ea' : 'kg'; }
+function volMult(id){ return perHand(id) ? 2 : 1; }
+// A logged top weight about double (or half) the lift's usual — likely the other basis.
+function dbOddity(id, topW, excludeId){
+  if(!PAIR_DB.has(id) || !(topW > 0)) return null;
+  const ws = seriesFor(id).filter(p=> p.id!==excludeId).map(p=> p.topW).filter(w=> w>0).sort((a,b)=> a-b);
+  if(ws.length < 2) return null;
+  const med = ws[Math.floor(ws.length/2)];
+  if(topW >= med*1.7) return {fix:'halve', med};
+  if(topW <= med*0.6) return {fix:'double', med};
+  return null;
+}
+function dbSuspects(){
+  const ign = new Set((PREFS.dbIgnore)||[]), out = [];
+  PAIR_DB.forEach(id=>{
+    seriesFor(id).forEach(p=>{
+      if(ign.has(p.id+':'+id)) return;
+      const o = dbOddity(id, p.topW, p.id);
+      if(o) out.push({id, sid:p.id, date:p.date, w:p.topW, ...o});
+    });
+  });
+  return out;
+}
+function scaleSets(sess, id, f){
+  (sess.entries[id]||[]).forEach(st=>{ if(st.w > 0) st.w = num(st.w*f); });
+}
+async function fixDb(sid, id, action){
+  const s = sessions.find(x=> x.id===sid);
+  if(!s) return;
+  if(action === 'leave'){
+    PREFS.dbIgnore = (PREFS.dbIgnore||[]).concat(sid+':'+id);
+    PREFS.updated = Date.now();
+  } else {
+    scaleSets(s, id, action==='halve' ? 0.5 : 2);
+    s.editedAt = Date.now(); delete s.recap;
+  }
+  await persist(); scheduleSync();
+  renderProgress();
+  if(currentDay==='N' && !activeDraft){ buildAutoPlan(); renderTrain(); }
+  if(dbSuspects().length) openDbReview(); else { closeData(); toast('Dumbbell entries all line up'); }
+}
+function openDbReview(){
+  const list = dbSuspects();
+  const rows = list.map(o=>{
+    const d = new Date(o.date+'T00:00:00').toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'});
+    const to = o.fix==='halve' ? o.w/2 : o.w*2;
+    return `<div class="rc-note" style="margin-bottom:8px"><b>${getName(o.id)}</b> · ${d}<br>
+      Logged ${fmt(o.w)} kg — your other sessions are around ${fmt(o.med)} kg ${perHand(o.id)?'each':'total'}.
+      ${o.fix==='halve' ? 'Probably entered as the total of both dumbbells.' : 'Probably entered for one dumbbell.'}
+      <div class="dm-row" style="margin-top:8px">
+        <button class="btn btn-ghost" onclick="fixDb(${o.sid},'${o.id}','leave')">It's right</button>
+        <button class="btn btn-primary" onclick="fixDb(${o.sid},'${o.id}','${o.fix}')">${o.fix==='halve'?'Halve':'Double'} → ${fmt(to)} kg</button>
+      </div></div>`;
+  }).join('');
+  document.getElementById('datamodal-card').innerHTML = `
+    <div class="dm-h">Check dumbbell entries</div>
+    <div class="dm-sub">These look like they were logged on a different basis from the rest of that lift's history (per dumbbell vs total). Fixing them keeps progress and suggestions honest.</div>
+    ${rows || '<div class="empty">Nothing looks out of line.</div>'}
+    <button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="closeData()">Close</button>`;
+  document.getElementById('datamodal').classList.add('show');
+}
+function basisPickerHTML(ex){
+  if(!PAIR_DB.has(ex.id)) return '';
+  const b = basisOf(ex.id);
+  return `<div class="info-cue"><span class="info-cue-l">Log weight as</span><div class="stepchips">
+      <button class="typechip${b==='each'?' on':''}" onclick="setBasis('${ex.id}','each')">Per dumbbell</button>
+      <button class="typechip${b==='total'?' on':''}" onclick="setBasis('${ex.id}','total')">Total of both</button></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">Pick one and stick to it — the weight box shows <b>kg ea</b> when it wants one dumbbell. Switching converts your history for this lift so the numbers stay comparable.</div></div>`;
+}
+async function setBasis(id, b){
+  if(basisOf(id) === b) return;
+  const f = b==='total' ? 2 : 0.5;
+  const n = doneSessions().filter(s=> s.entries && s.entries[id]).length;
+  if(n && !confirm(`Convert ${n} logged session${n!==1?'s':''} of ${getName(id)} to ${b==='total'?'totals (×2)':'per dumbbell (÷2)'}?\n\nOK converts them. Cancel switches the label only — use that if your history was already logged ${b==='total'?'as totals':'per dumbbell'}.`)){
+    // label only
+  } else {
+    sessions.forEach(s=>{ if(!s.draft && s.entries && s.entries[id]){ scaleSets(s, id, f); s.editedAt = Date.now(); delete s.recap; } });
+  }
+  PREFS.basis = PREFS.basis || {}; PREFS.basis[id] = b; PREFS.updated = Date.now();
+  await persist(); scheduleSync();
+  openInfo(id); renderTrain(); renderProgress();
+}
+
 // ── Real weight steps ───────────────────────────────────────────────────────
 // Per-lift override (set in the ⓘ panel), else the library default. Suggestions
 // also snap to weights you've actually logged, so cable stacks like 43 → 59 → 63 work.
@@ -987,7 +1077,8 @@ function suggestBase(ex){
 
   // Coming back after time off: back the weight off rather than chasing old numbers.
   if(rusty){
-    const w = roundW(ex, Math.max(st, topW * layoffFactor(gap, grp)));
+    let w = roundW(ex, Math.max(st, topW * layoffFactor(gap, grp)));
+    if(w >= topW && topW > st) w = num(topW - st);            // rounding mustn't cancel the back-off
     const kept = returnMode && (returnMode.ret[grp] || 0) >= 0.25;
     return {weight: w, dir:'hold',
             tag: kept
@@ -1066,7 +1157,7 @@ function setRowHTML(exId, i, phW, val){
   const wu = !!(val && val.wu);
   return `<div class="set${wu?' wu':''}" data-ex="${exId}">
     <button type="button" class="sn" title="Tap to mark as a warm-up" onclick="toggleWarm(this)">${wu?'W':i+1}</button>
-    <div class="inp"><input inputmode="decimal" data-ex="${exId}" data-f="w" placeholder="${phW}"${wv}><span class="unit">kg</span></div>
+    <div class="inp${perHand(exId)?' each':''}"><input inputmode="decimal" data-ex="${exId}" data-f="w" placeholder="${phW}"${wv}><span class="unit">${unitTxt(exId)}</span></div>
     <div class="inp"><input inputmode="numeric" data-ex="${exId}" data-f="r" placeholder=""${rv}></div>
   </div>`;
 }
@@ -1131,7 +1222,7 @@ function renderTrain(){
     } else if(sug && sug.dir==='swap'){
       pill = `<button class="sug swap" onclick="swapLift('${ex.id}')">⇄ ${sug.tag}</button>`;
     } else if(sug){
-      pill = `<button class="sug ${sug.dir}" onclick="fillWeight('${ex.id}',${sug.weight})">${ARROW[sug.dir]} ${fmt(sug.weight)} kg · ${sug.tag}</button>`;
+      pill = `<button class="sug ${sug.dir}" onclick="fillWeight('${ex.id}',${sug.weight})">${ARROW[sug.dir]} ${fmt(sug.weight)} kg${perHand(ex.id)?' each':''} · ${sug.tag}</button>`;
     } else if(last){
       pill = (ex.bw && last.w===0)
         ? `<div class="sug repeat">↺ last ${last.r} reps — beat it</div>`
@@ -1309,6 +1400,7 @@ function openInfo(id){
       <div class="dm-sub">Works: <b style="color:var(--amber)">${m.label}</b> · target ${repsLabel(ex)}</div>
       ${bodySVG(new Set(m.regions))}
       ${cue ? `<div class="info-cue"><span class="info-cue-l">Form</span>${cue}</div>` : ''}
+      ${basisPickerHTML(ex)}
       ${ex.bw ? '' : stepPickerHTML(ex)}
       <button class="btn btn-primary" onclick="closeInfo()">Done</button>`;
   }
@@ -1915,7 +2007,8 @@ async function saveLift(exId){
   if(card) card.classList.add('saved');
   const btn = document.getElementById('sv-'+exId);
   if(btn){ btn.classList.add('done'); btn.textContent = '✓ Saved'; }
-  toast(`${ex.name} saved`);
+  const odd = dbOddity(exId, Math.max(...sets.map(x=> x.w||0)));
+  toast(odd ? `${ex.name} saved — ${odd.fix==='halve'?'looks like a total':'looks like one dumbbell'}? This lift is logged ${perHand(exId)?'per dumbbell':'as a total'}` : `${ex.name} saved`);
   buzz(40);
   updateWake();
 }
@@ -1939,7 +2032,7 @@ function buildFeedback(sess){
     const ex = EXDEF[id] || {id, name:getName(id)};
     const sets = workSets(sess.entries[id]);
     totalSets += sets.length;
-    sets.forEach(s=> totalVol += (s.w||0)*s.r);
+    sets.forEach(s=> totalVol += (s.w||0)*s.r*volMult(id));
     if(PATTERN[id]) groups.add(GROUP[PATTERN[id]]);
     const cur = topOf(sets, ex.bw);
     let bestPrev=0, bestPrevR=0;
@@ -2175,7 +2268,11 @@ function renderProgress(){
     ? actHTML + (any ? `<div class="sect-h${actHTML?' gap':''}">Lifts</div>` + html : '')
     : '<div class="empty">No sessions logged yet. Log your first one in the Train tab and your numbers will start tracking here.</div>';
   const hint = document.getElementById('imphint');
-  if(hint){
+  const sus = dbSuspects();
+  if(hint && sus.length && sessions.length){
+    hint.classList.add('show');
+    hint.innerHTML = `${sus.length} dumbbell entr${sus.length>1?'ies look':'y looks'} logged on a different basis (per dumbbell vs total). <button class="pb-btn" style="margin-top:8px" onclick="openDbReview()">Review</button>`;
+  } else if(hint){
     if(!sessions.length){ hint.classList.add('show'); hint.innerHTML = `Starting fresh? If you logged workouts in an earlier version, tap <b>Import backup</b> below to restore them.`; }
     else hint.classList.remove('show');
   }
@@ -2721,7 +2818,7 @@ function editSetHTML(id, i, st){
   const v = k => (st && st[k] != null && st[k] !== '') ? ` value="${st[k]}"` : '';
   return `<div class="eset${wu?' wu':''}" data-i="${i}">
     <button type="button" class="sn" onclick="editToggleWarm('${id}',${i})">${wu?'W':i+1}</button>
-    <div class="inp"><input inputmode="decimal" data-f="w"${v('w')}><span class="unit">kg</span></div>
+    <div class="inp${perHand(id)?' each':''}"><input inputmode="decimal" data-f="w"${v('w')}><span class="unit">${unitTxt(id)}</span></div>
     <div class="inp"><input inputmode="numeric" data-f="r"${v('r')}><span class="unit">reps</span></div>
     <button type="button" class="rm" title="Remove set" onclick="editRemoveSet('${id}',${i})">×</button>
   </div>`;
@@ -2808,9 +2905,16 @@ function editChangeHTML(id){
     <label><input type="radio" name="ed-chg-scope" value="this" checked> Just this session</label>
     <label><input type="radio" name="ed-chg-scope" value="earlier"> This and every earlier session (${n('earlier')} more)</label>
     <label><input type="radio" name="ed-chg-scope" value="all"> Every session in the log (${n('all')} more)</label>
+    <div class="dm-row" style="margin-top:8px"><button class="btn btn-ghost" onclick="editScale('${id}',0.5)">Halve weights</button><button class="btn btn-ghost" onclick="editScale('${id}',2)">Double weights</button></div>
+    <div class="fine">Halve / double fixes a dumbbell lift entered as a total when it should be per dumbbell (or the reverse), for this session only.</div>
     <div class="fine">The sets keep their weights and reps; they're just counted under the new lift from now on, so its progress, suggestions and best-ever all pick them up.</div>
     <div class="dm-row"><button class="btn btn-ghost" onclick="editCloseChange()">Cancel</button><button class="btn btn-primary" onclick="editApplyChange('${id}')">Change</button></div>
   </div>`;
+}
+function editScale(id, f){
+  readEdit();
+  (EDIT.entries[id]||[]).forEach(st=>{ const w = parseFloat(st.w); if(!isNaN(w) && w>0) st.w = String(num(w*f)); });
+  EDIT.changing = null; renderEdit();
 }
 function editOpenChange(id){ readEdit(); EDIT.changing = EDIT.changing===id ? null : id; renderEdit(); }
 function editCloseChange(){ readEdit(); EDIT.changing = null; renderEdit(); }
