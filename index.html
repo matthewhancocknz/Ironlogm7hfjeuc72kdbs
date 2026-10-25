@@ -532,7 +532,7 @@ window.addEventListener('error', function(e){
       </div>
       <div class="syncstat" id="syncstat"></div>
       <button class="reset" id="resetbtn" onclick="resetAll()">Reset all data</button>
-      <div class="buildtag">Iron.Log · build 2026-10-25 · v8.6.1</div>
+      <div class="buildtag">Iron.Log · build 2026-10-26 · v8.7</div>
     </div>
   </section>
 </div>
@@ -585,6 +585,7 @@ const LIBRARY = [
   {id:'fsquat',    name:'Front squat',         cat:'knee',  role:'compound', lo:5, hi:8,  inc:5},
   {id:'legpress',  name:'Leg press',           cat:'knee',  role:'compound', lo:8, hi:12, inc:5},
   {id:'hacksquat', name:'Hack squat',          cat:'knee',  role:'compound', lo:8, hi:10, inc:5},
+  {id:'pendsq',    name:'Pendulum squat',      cat:'knee',  role:'compound', lo:8, hi:12, inc:5},
   {id:'gobsquat',  name:'Goblet squat',        cat:'knee',  role:'accessory',lo:8, hi:12, inc:2.5},
   {id:'bsplit',    name:'Bulgarian split squat',cat:'knee', role:'accessory',lo:8, hi:12, inc:2.5},
   {id:'lunge',     name:'Walking lunge',       cat:'knee',  role:'accessory',lo:8, hi:12, inc:2.5},
@@ -608,6 +609,7 @@ const LIBRARY = [
   {id:'machpress', name:'Machine chest press', cat:'hpush', role:'compound', lo:8, hi:12, inc:2.5},
   {id:'dips',      name:'Dips',                cat:'hpush', role:'compound', lo:6, hi:12, inc:2.5, bw:true},
   {id:'pecfly',    name:'Pec deck / cable fly',cat:'hpush', role:'iso',      lo:10,hi:15, inc:2.5},
+  {id:'mffly',     name:'Multiflight pec fly', cat:'hpush', role:'iso',      lo:10,hi:15, inc:2.5},
   // Shoulders / vertical push
   {id:'ohp',       name:'Overhead press',      cat:'vpush', role:'compound', lo:6, hi:10, inc:2.5},
   {id:'dbohp',     name:'DB shoulder press',   cat:'vpush', role:'compound', lo:8, hi:12, inc:2.5},
@@ -615,6 +617,8 @@ const LIBRARY = [
   {id:'arnold',    name:'Arnold press',        cat:'vpush', role:'accessory',lo:8, hi:12, inc:2.5},
   {id:'latraise',  name:'Lateral raise',       cat:'vpush', role:'iso',      lo:12,hi:15, inc:2.5},
   {id:'rearfly',   name:'Rear delt fly',       cat:'vpush', role:'iso',      lo:12,hi:15, inc:2.5},
+  {id:'mflat',     name:'Multiflight lateral raise',cat:'vpush',role:'iso',  lo:12,hi:15, inc:2.5},
+  {id:'mfrear',    name:'Multiflight rear delt',cat:'vpush', role:'iso',      lo:12,hi:15, inc:2.5},
   // Back / horizontal pull
   {id:'row',       name:'Bent-over row',       cat:'hpull', role:'compound', lo:8, hi:10, inc:2.5},
   {id:'dbrow',     name:'DB row',              cat:'hpull', role:'compound', lo:8, hi:12, inc:2.5},
@@ -709,6 +713,10 @@ const CUES = {
   ohp:'Brace hard, press from the collarbone to overhead, head through at the top.',
   dbohp:'Dumbbells at shoulder height, press overhead, don\u2019t arch the back.',
   machohp:'Handles at shoulder height, press up without locking hard, control the way down.',
+  pendsq:'Back flat on the pad, feet mid-platform, sink as deep as you can control, drive up through the whole foot.',
+  mffly:'Arms on the pads with a slight bend, bring them together in front of the chest, squeeze, control the return.',
+  mflat:'Pads against the outside of the arms, raise to shoulder height leading with the elbows, lower slowly.',
+  mfrear:'Arms out wide, squeeze the shoulder blades and rear delts at the back, no swinging or shrugging.',
   arnold:'Start palms-in, rotate to palms-forward as you press overhead.',
   latraise:'Slight forward lean, lead with the elbows to shoulder height, no swing.',
   rearfly:'Hinge over, raise out wide, squeeze the rear delts, thumbs slightly down.',
@@ -791,6 +799,29 @@ const SKEY = 'ironlog-sync-v1';
 // one lift mid-workout rewrites the plan, the suggestions and layoff mode.
 function doneSessions(){ return sessions.filter(s=> !s.draft); }
 
+// If you logged something as a custom lift ("Other — type a name") and it now exists
+// in the library under the same name, move those sets onto the library lift.
+async function adoptCustomLifts(){
+  const norm = t => String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const byName = {}; LIBRARY.forEach(e=> byName[norm(e.name)] = e.id);
+  const alias = {pendulumsquat:'pendsq', pendulum:'pendsq', multiflightfly:'mffly', multiflightpecfly:'mffly',
+                 multiflightlateralraise:'mflat', multiflightlateral:'mflat', multiflightreardelt:'mfrear', multiflightreardeltfly:'mfrear'};
+  let moved = 0;
+  Object.keys(NAMES_REG).forEach(cid=>{
+    const to = byName[norm(NAMES_REG[cid])] || alias[norm(NAMES_REG[cid])];
+    if(!to) return;
+    sessions.forEach(s=>{
+      if(s.kind==='activity' || !s.entries || !s.entries[cid]) return;
+      s.entries[to] = (s.entries[to]||[]).concat(s.entries[cid]); delete s.entries[cid];
+      if(s.effort && s.effort[cid]){ if(!s.effort[to]) s.effort[to] = s.effort[cid]; delete s.effort[cid]; }
+      if(Array.isArray(s.plan)) s.plan = s.plan.map(x=> x===cid ? to : x).filter((x,i,a)=> a.indexOf(x)===i);
+      if(!s.draft) s.editedAt = Date.now();
+      moved++;
+    });
+    delete NAMES_REG[cid];
+  });
+  if(moved){ await persist(); setTimeout(()=> toast(`Moved ${moved} custom-lift session${moved!==1?'s':''} onto library lifts`), 800); }
+}
 async function loadJSON(k, dflt){
   try{ const r = await window.storage.get(k); return r && r.value ? JSON.parse(r.value) : dflt; }
   catch(e){ return dflt; }
@@ -3137,6 +3168,7 @@ function toast(msg){
 (async function(){
   document.getElementById('sessdate').value = todayStr();
   await loadSessions();
+  await adoptCustomLifts();
   ensureBlock();
   // resume an in-progress (draft) session if one exists
   const draft = sessions.find(s=> s.draft);
